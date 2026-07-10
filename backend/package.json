@@ -1,0 +1,22 @@
+{
+  "name": "innovation-center-backend",
+  "version": "1.0.0",
+  "description": "Local Personnel & Project Management Platform - Backend",
+  "main": "src/index.js",
+  "engines": { "node": ">=22.5.0" },
+  "scripts": {
+    "start": "node --experimental-sqlite src/index.js",
+    "dev": "nodemon --exec \"node --experimental-sqlite\" src/index.js",
+    "seed": "node --experimental-sqlite src/utils/seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.10",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
