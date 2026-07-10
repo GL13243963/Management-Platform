@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#005BAC" />
+<title>Management Platform · 项目 / 考勤 / 工时管理台</title>
+
+<!-- Tailwind (Play CDN, zero-build) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            50: '#EEF5FC', 100: '#D6E7F6', 200: '#A9CCEC',
+            300: '#75AFDF', 400: '#4292D0', 500: '#005BAC', /* CSCEC Blue */
+            600: '#004E93', 700: '#00427C', 800: '#013461', 900: '#022647',
+          },
+          ink: { 900:'#0F172A', 700:'#1F2937', 500:'#475569', 400:'#64748B', 300:'#94A3B8', 200:'#CBD5E1' },
+          canvas: { DEFAULT: '#F5F7FA', card: '#FFFFFF' },
+        },
+        boxShadow: {
+          card: '0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.06)',
+          pop:  '0 8px 30px rgba(0,91,172,.14), 0 2px 6px rgba(15,23,42,.06)',
+        },
+        borderRadius: { xl2: '14px' },
+        fontFamily: {
+          sans: ['"Inter"','"PingFang SC"','"Microsoft YaHei"','system-ui','sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Libraries: Excel parser & chart -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/customParseFormat.js"></script>
+
+<style>
+  html, body { background: #F5F7FA; }
+  /* Fine typography */
+  body { font-feature-settings: "cv02","cv03","cv04","cv11"; -webkit-font-smoothing: antialiased; }
+  /* Custom scrollbar (desktop only) */
+  @media (min-width: 768px) {
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; border: 2px solid #F5F7FA; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  }
+  /* Table row hover polish */
+  .tbl tbody tr:hover { background: #F8FAFC; }
+  .tbl th { font-weight: 600; color: #475569; letter-spacing: .01em; }
+  .tbl th, .tbl td { padding: 10px 14px; border-bottom: 1px solid #EEF2F7; }
+  .tbl thead th { border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
+  /* Buttons */
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:10px; font-weight:600; font-size:14px; transition:all .15s; }
+  .btn-primary { background:#005BAC; color:#fff; box-shadow: 0 2px 6px rgba(0,91,172,.25); }
+  .btn-primary:hover { background:#004E93; box-shadow: 0 4px 12px rgba(0,91,172,.35); }
+  .btn-ghost { background:#fff; color:#1F2937; border:1px solid #E2E8F0; }
+  .btn-ghost:hover { background:#F8FAFC; border-color:#CBD5E1; }
+  .btn-danger { background:#fff; color:#B91C1C; border:1px solid #FCA5A5; }
+  .btn-danger:hover { background:#FEF2F2; }
+  /* Form inputs */
+  .inp { width:100%; padding:8px 12px; border-radius:10px; border:1px solid #E2E8F0; background:#fff; font-size:14px; transition:.15s; }
+  .inp:focus { outline:none; border-color:#4292D0; box-shadow: 0 0 0 3px rgba(66,146,208,.18); }
+  .lbl { font-size:12px; font-weight:600; color:#475569; margin-bottom:4px; display:block; }
+  /* Badges */
+  .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .badge-green { background:#DCFCE7; color:#166534; }
+  .badge-amber { background:#FEF3C7; color:#92400E; }
+  .badge-red   { background:#FEE2E2; color:#991B1B; }
+  .badge-slate { background:#E2E8F0; color:#334155; }
+  .badge-blue  { background:#DBEAFE; color:#1E40AF; }
+  /* Sidebar item */
+  .nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; font-size:14px; color:#334155; font-weight:500; cursor:pointer; }
+  .nav-item:hover { background:#EEF5FC; color:#005BAC; }
+  .nav-item.active { background:#005BAC; color:#fff; box-shadow: 0 4px 12px rgba(0,91,172,.30); }
+  .nav-item.active svg { color:#fff; }
+  /* Bottom nav (mobile) */
+  .bnav { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:8px 4px; flex:1; color:#64748B; font-size:11px; font-weight:600; }
+  .bnav.active { color:#005BAC; }
+  /* Card */
+  .card { background:#fff; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.06); }
+  /* Modal */
+  .modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.4); backdrop-filter: blur(4px); z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .modal { background:#fff; border-radius:16px; max-width:560px; width:100%; padding:24px; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 90vh; overflow-y:auto; }
+  /* Toast */
+  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#0F172A; color:#fff; padding:10px 20px; border-radius:999px; font-size:13px; font-weight:500; z-index:100; box-shadow:0 8px 30px rgba(0,0,0,.35); animation: toastIn .2s ease-out; }
+  @keyframes toastIn { from { opacity:0; transform:translate(-50%, 10px);} to { opacity:1; transform:translate(-50%, 0);} }
+  /* Weight slider */
+  input[type="range"].w-slider { accent-color: #005BAC; }
+  /* Utility */
+  .num { font-variant-numeric: tabular-nums; }
+  .clickable { cursor: pointer; }
+  /* Print-friendly help */
+  @media print { .no-print { display:none !important; } }
+</style>
+</head>
+
+<body class="text-ink-900">
+
+<div id="app"></div>
+
+<!-- Icons (Heroicons-mini, inlined as symbols) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-dashboard" viewBox="0 0 20 20"><path fill="currentColor" d="M3 4a1 1 0 011-1h5a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 11a1 1 0 011-1h5a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm8-4a1 1 0 011-1h5a1 1 0 011 1v6a1 1 0 01-1 1h-5a1 1 0 01-1-1v-6zm0-7a1 1 0 011-1h5a1 1 0 011 1v3a1 1 0 01-1 1h-5a1 1 0 01-1-1V4z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 20 20"><path fill="currentColor" d="M7 9a4 4 0 100-8 4 4 0 000 8zm5.6-.8a3 3 0 100-5.4 3 3 0 000 5.4zM1 16.6C1 13.4 3.7 11 7 11s6 2.4 6 5.6c0 .5-.4.9-.9.9H1.9c-.5 0-.9-.4-.9-.9zM14 17.5c0-1.7-.7-3.3-1.9-4.5.6-.1 1.2-.1 1.9-.1 3 0 5 1.9 5 4.6 0 .5-.4.9-.9.9H14v-.9z"/></symbol>
+  <symbol id="i-briefcase" viewBox="0 0 20 20"><path fill="currentColor" d="M6 3a2 2 0 012-2h4a2 2 0 012 2v1h3a2 2 0 012 2v3H1V6a2 2 0 012-2h3V3zm2 0v1h4V3H8zM1 10.9V15a2 2 0 002 2h14a2 2 0 002-2v-4.1c-2.8 1.4-5.9 2.1-9 2.1s-6.2-.7-9-2.1z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 20 20"><path fill="currentColor" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .2.08.4.22.53l3 3a.75.75 0 001.06-1.06L10.75 9.7V5z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 20 20"><path fill="currentColor" d="M2 11a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6zm6-4a1 1 0 011-1h2a1 1 0 011 1v10a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-4a1 1 0 011-1h2a1 1 0 011 1v14a1 1 0 01-1 1h-2a1 1 0 01-1-1V3z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 20 20"><path fill="currentColor" d="M4 3a1 1 0 00-1 1v3a3 3 0 000 6v3a1 1 0 102 0v-3a3 3 0 000-6V4a1 1 0 00-1-1zm12 0a1 1 0 00-1 1v9a3 3 0 000 6a1 1 0 102 0a3 3 0 000-6V4a1 1 0 00-1-1zm-6 0a1 1 0 00-1 1a3 3 0 000 6v9a1 1 0 102 0V10a3 3 0 000-6a1 1 0 00-1-1z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 20 20"><path fill="currentColor" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.2 6.8a2 2 0 013.9.7c0 .6-.3 1-.9 1.5l-.5.4c-.7.5-1 .9-1 1.6a.75.75 0 001.5 0c0-.2.1-.4.4-.7l.5-.3c.9-.7 1.5-1.4 1.5-2.5a3.5 3.5 0 10-6.9-.7.75.75 0 001.5 0v0zm2.8 6.7a1 1 0 11-2 0 1 1 0 012 0z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 20 20"><path fill="currentColor" d="M10 2a.75.75 0 01.53.22l4 4a.75.75 0 01-1.06 1.06L10.75 4.56V13a.75.75 0 01-1.5 0V4.56L6.53 7.28a.75.75 0 01-1.06-1.06l4-4A.75.75 0 0110 2zM3 15a1 1 0 011 1v1h12v-1a1 1 0 112 0v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2a1 1 0 011-1z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 20 20"><path fill="currentColor" d="M10 14a.75.75 0 01-.53-.22l-4-4a.75.75 0 011.06-1.06l2.72 2.72V3a.75.75 0 011.5 0v8.44l2.72-2.72a.75.75 0 011.06 1.06l-4 4A.75.75 0 0110 14zM3 15a1 1 0 011 1v1h12v-1a1 1 0 112 0v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2a1 1 0 011-1z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 20 20"><path fill="currentColor" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 20 20"><path fill="currentColor" d="M8 3.5A1.5 1.5 0 019.5 2h1A1.5 1.5 0 0112 3.5V4h3.5a.75.75 0 010 1.5h-.6l-.7 9.5A2 2 0 0112.2 17H7.8a2 2 0 01-2-1.9l-.7-9.6H4.5A.75.75 0 014.5 4H8v-.5zm1.5 0V4h1v-.5h-1zM7 7l.5 8h5L13 7H7z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 20 20"><path fill="currentColor" d="M13.4 2.6a2 2 0 012.8 0l1.2 1.2a2 2 0 010 2.8L7 17.4l-4.7 1.3 1.3-4.7L13.4 2.6zm-1.4 3.5l2 2 1.7-1.7-2-2-1.7 1.7z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 20 20"><path fill="currentColor" d="M3 5.75A.75.75 0 013.75 5h12.5a.75.75 0 010 1.5H3.75A.75.75 0 013 5.75zm0 4A.75.75 0 013.75 9h12.5a.75.75 0 010 1.5H3.75A.75.75 0 013 9.75zm.75 3.25a.75.75 0 000 1.5h12.5a.75.75 0 000-1.5H3.75z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 20 20"><path fill="currentColor" d="M5.5 15a4.5 4.5 0 01-.5-8.98 5.5 5.5 0 0110.6 1.65A4 4 0 0114.5 15h-9z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 20 20"><path fill="currentColor" d="M9 3.5a5.5 5.5 0 013.9 9.4l3.6 3.6a1 1 0 11-1.4 1.4l-3.6-3.6A5.5 5.5 0 119 3.5zm0 2a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></symbol>
+</svg>
+
+<script>
+/* ============================================================
+   Management Platform — single-file build
+   数据 100% 存本地 (localStorage)，可导出 JSON 至 OneDrive 同步。
+   ============================================================ */
+
+/* ---------------- Utility ---------------- */
+dayjs.extend(dayjs_plugin_customParseFormat);
+
+const STORAGE_KEY = 'mgmt-platform-v1';
+const SHIFT_START = '09:35';
+const SHIFT_END   = '17:30';
+
+const uid = (p='') => p + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+const $  = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n, d=2) => n == null || isNaN(n) ? '—' : Number(n).toFixed(d).replace(/\.?0+$/, '');
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+function parseTime(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const h = +m[1], mm = +m[2];
+  if (h > 23 || mm > 59) return null;
+  return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+function toMin(hhmm) { if (!hhmm) return 0; const [h,m] = hhmm.split(':').map(Number); return h*60 + m; }
+function computeDaily({ clockIn, clockOut }) {
+  const inT = parseTime(clockIn), outT = parseTime(clockOut);
+  if (!inT || !outT) return { clockIn: inT, clockOut: outT, workHours: 0, isLate:false, isEarlyLeave:false, status:'absent' };
+  const startMin = toMin(SHIFT_START), endMin = toMin(SHIFT_END);
+  const inMin = toMin(inT), outMin = toMin(outT);
+  const workHours = Math.max(0, (outMin - inMin) / 60);
+  const isLate = inMin > startMin;
+  const isEarlyLeave = outMin < endMin;
+  let status = 'normal';
+  if (isLate && isEarlyLeave) status = 'late_and_early';
+  else if (isLate) status = 'late';
+  else if (isEarlyLeave) status = 'early';
+  return { clockIn: inT, clockOut: outT, workHours: Math.round(workHours*100)/100, isLate, isEarlyLeave, status };
+}
+
+/* ---------------- Store (localStorage) ---------------- */
+const defaultStore = () => ({
+  version: 1,
+  meta: { updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() },
+  employees: [],   // {id, name, department, employeeNo}
+  projects:  [],   // {id, name, code, color, budgetHours}
+  memberships:[],  // {id, employeeId, projectId, weight, role, startDate, endDate?}
+  attendance:[],   // {id, employeeId, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave, note?}
+});
+
+let db = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultStore();
+    const parsed = JSON.parse(raw);
+    // Merge with defaults (forward-compat)
+    return { ...defaultStore(), ...parsed };
+  } catch (e) {
+    console.warn('load() failed, resetting:', e);
+    return defaultStore();
+  }
+}
+function save() {
+  db.meta.updatedAt = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
+/* ---------------- Toast / Modal ---------------- */
+let toastTimer = null;
+function toast(msg) {
+  clearTimeout(toastTimer);
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  toastTimer = setTimeout(()=> el.remove(), 2400);
+}
+function modal(html, onMount) {
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `<div class="modal">${html}</div>`;
+  const close = () => wrap.remove();
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  document.body.appendChild(wrap);
+  onMount?.(wrap, close);
+  return close;
+}
+function confirmDialog(msg, onOk) {
+  modal(`
+    <h3 class="text-lg font-bold mb-2">确认操作</h3>
+    <p class="text-ink-500 mb-6">${esc(msg)}</p>
+    <div class="flex justify-end gap-2">
+      <button class="btn btn-ghost" data-x="cancel">取消</button>
+      <button class="btn btn-primary" data-x="ok" style="background:#B91C1C">确认</button>
+    </div>
+  `, (root, close) => {
+    root.querySelector('[data-x=cancel]').onclick = close;
+    root.querySelector('[data-x=ok]').onclick = () => { close(); onOk(); };
+  });
+}
+
+/* ---------------- Router ---------------- */
+const routes = ['dashboard', 'employees', 'projects', 'attendance', 'allocation', 'analytics', 'help'];
+function currentRoute() {
+  const h = (location.hash || '#/dashboard').replace(/^#\/?/, '');
+  return routes.includes(h) ? h : 'dashboard';
+}
+window.addEventListener('hashchange', render);
+
+/* ---------------- Layout Shell ---------------- */
+function shell(mainHtml) {
+  const r = currentRoute();
+  const navItems = [
+    { id:'dashboard', label:'工作台', icon:'i-dashboard' },
+    { id:'employees', label:'员工',   icon:'i-users' },
+    { id:'projects',  label:'项目',   icon:'i-briefcase' },
+    { id:'attendance',label:'考勤',   icon:'i-clock' },
+    { id:'allocation',label:'分配',   icon:'i-sliders' },
+    { id:'analytics', label:'分析',   icon:'i-chart' },
+    { id:'help',      label:'帮助',   icon:'i-help' },
+  ];
+  return `
+    <div class="min-h-screen flex">
+      <!-- Sidebar (desktop) -->
+      <aside class="hidden md:flex flex-col w-60 shrink-0 bg-white border-r border-slate-200 p-4">
+        <div class="flex items-center gap-2 px-2 py-3 mb-3">
+          <div class="w-9 h-9 rounded-xl bg-brand-500 text-white flex items-center justify-center font-bold shadow-pop">MP</div>
+          <div>
+            <div class="font-bold text-sm leading-tight">Management</div>
+            <div class="text-[11px] text-ink-400 leading-tight">项目 · 考勤 · 工时</div>
+          </div>
+        </div>
+        <nav class="flex flex-col gap-1">
+          ${navItems.map(n => `
+            <a href="#/${n.id}" class="nav-item ${r===n.id?'active':''}">
+              <svg class="w-4 h-4 text-ink-400"><use href="#${n.icon}"/></svg>
+              <span>${n.label}</span>
+            </a>
+          `).join('')}
+        </nav>
+        <div class="mt-auto text-[11px] text-ink-400 px-2 pt-4 border-t border-slate-100">
+          v1.0 · 本地数据，浏览器缓存<br/>
+          <span class="text-ink-300">${new Date(db.meta.updatedAt).toLocaleString('zh-CN')}</span>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="flex-1 min-w-0 pb-20 md:pb-6">
+        <!-- Topbar -->
+        <header class="sticky top-0 z-10 bg-canvas/85 backdrop-blur border-b border-slate-200/80">
+          <div class="max-w-6xl mx-auto px-4 md:px-8 h-14 flex items-center gap-3">
+            <button class="md:hidden btn-ghost btn !p-2" onclick="document.body.dispatchEvent(new CustomEvent('open-menu'))" aria-label="菜单">
+              <svg class="w-5 h-5"><use href="#i-menu"/></svg>
+            </button>
+            <div class="font-bold text-base md:text-lg">${navItems.find(n=>n.id===r).label}</div>
+            <div class="ml-auto flex items-center gap-2">
+              <button class="btn btn-ghost" onclick="exportData()" title="导出到 JSON">
+                <svg class="w-4 h-4"><use href="#i-download"/></svg><span class="hidden sm:inline">导出</span>
+              </button>
+              <label class="btn btn-ghost cursor-pointer" title="从 JSON 导入">
+                <svg class="w-4 h-4"><use href="#i-upload"/></svg><span class="hidden sm:inline">导入</span>
+                <input type="file" accept=".json,application/json" hidden onchange="importDataFile(this.files[0])"/>
+              </label>
+            </div>
+          </div>
+        </header>
+
+        <div class="max-w-6xl mx-auto p-4 md:p-8">
+          ${mainHtml}
+        </div>
+      </main>
+    </div>
+
+    <!-- Mobile bottom nav -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex z-20" style="padding-bottom: env(safe-area-inset-bottom);">
+      ${navItems.slice(0,6).map(n => `
+        <a href="#/${n.id}" class="bnav ${r===n.id?'active':''}">
+          <svg class="w-5 h-5"><use href="#${n.icon}"/></svg>
+          <span>${n.label}</span>
+        </a>
+      `).join('')}
+    </nav>
+  `;
+}
+
+/* ---------------- Views ---------------- */
+function viewDashboard() {
+  const emps = db.employees.length;
+  const projs = db.projects.length;
+  const totalHours = db.attendance.reduce((s, a) => s + (a.workHours || 0), 0);
+  const lateCnt = db.attendance.filter(a => a.isLate).length;
+  const earlyCnt = db.attendance.filter(a => a.isEarlyLeave).length;
+  const normalCnt = db.attendance.filter(a => a.status === 'normal').length;
+  const attendedDays = db.attendance.filter(a => a.workHours > 0).length;
+
+  // Last 14 days chart data
+  const last14 = [...Array(14)].map((_,i) => dayjs().subtract(13-i, 'day').format('YYYY-MM-DD'));
+  const dailyHours = last14.map(d => db.attendance.filter(a => a.date === d).reduce((s,a)=>s+(a.workHours||0), 0));
+
+  // Project hours (weighted allocation)
+  const projHours = computeProjectHours();
+  const topProjects = [...projHours.values()].sort((a,b)=>b.hours-a.hours).slice(0,5);
+
+  const empty = emps === 0 && projs === 0 && db.attendance.length === 0;
+
+  return `
+    <!-- KPI grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+      ${kpi('员工', emps, 'i-users', 'brand-500')}
+      ${kpi('项目', projs, 'i-briefcase', 'emerald-500')}
+      ${kpi('总工时', fmt(totalHours,1)+'h', 'i-clock', 'amber-500')}
+      ${kpi('异常/正常', `${lateCnt+earlyCnt} / ${normalCnt}`, 'i-chart', 'rose-500')}
+    </div>
+
+    ${empty ? `
+      <div class="card p-6 md:p-10 text-center border-2 border-dashed border-slate-200">
+        <div class="text-4xl mb-3">👋</div>
+        <h3 class="font-bold text-lg mb-2">欢迎使用 Management Platform</h3>
+        <p class="text-ink-500 max-w-md mx-auto mb-6">
+          这是一个本地运行的项目 / 考勤 / 工时管理台。三步开始：<br/>
+          <span class="font-semibold text-brand-500">① 添加员工</span> →
+          <span class="font-semibold text-brand-500">② 建立项目</span> →
+          <span class="font-semibold text-brand-500">③ 导入考勤月报</span>
+        </p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <a href="#/employees" class="btn btn-primary">添加员工</a>
+          <a href="#/projects" class="btn btn-ghost">建立项目</a>
+          <a href="#/attendance" class="btn btn-ghost">导入月报</a>
+          <a href="#/help" class="btn btn-ghost">查看帮助</a>
+        </div>
+      </div>
+    ` : `
+      <!-- Chart + Top projects -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold">近 14 日工时</h3>
+            <span class="text-xs text-ink-400">按登记日汇总</span>
+          </div>
+          <div class="h-56"><canvas id="chart-daily"></canvas></div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold">项目工时 Top 5</h3>
+          </div>
+          ${topProjects.length === 0 ? `<div class="text-ink-400 text-sm py-6 text-center">暂无分配数据</div>` : `
+            <ul class="space-y-3">
+              ${topProjects.map(p => {
+                const max = topProjects[0].hours || 1;
+                const pct = Math.round(p.hours / max * 100);
+                const proj = db.projects.find(x=>x.id===p.projectId);
+                return `
+                  <li>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                      <span class="font-semibold truncate">${esc(proj?.name || '未知')}</span>
+                      <span class="text-ink-500 num">${fmt(p.hours,1)}h</span>
+                    </div>
+                    <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-brand-500 rounded-full" style="width:${pct}%"></div>
+                    </div>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+          `}
+        </div>
+      </div>
+
+      <!-- Recent attendance -->
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold">最新考勤 (10)</h3>
+          <a href="#/attendance" class="text-brand-500 text-sm font-semibold hover:underline">查看全部 →</a>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="tbl w-full text-sm">
+            <thead><tr>
+              <th>日期</th><th>员工</th><th>上班</th><th>下班</th><th>工时</th><th>状态</th>
+            </tr></thead>
+            <tbody>
+              ${[...db.attendance].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(a => `
+                <tr>
+                  <td class="num">${a.date}</td>
+                  <td>${esc(empName(a.employeeId))}</td>
+                  <td class="num">${a.clockIn || '—'}</td>
+                  <td class="num">${a.clockOut || '—'}</td>
+                  <td class="num font-semibold">${fmt(a.workHours,1)}h</td>
+                  <td>${statusBadge(a.status)}</td>
+                </tr>
+              `).join('') || `<tr><td colspan="6" class="text-center text-ink-400 py-6">暂无数据</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `}
+  `;
+}
+function kpi(label, val, icon, colorCls) {
+  return `
+    <div class="card p-4">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs text-ink-400 font-semibold">${label}</div>
+          <div class="text-2xl font-bold num mt-1">${val}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-${colorCls}/10 text-${colorCls} flex items-center justify-center">
+          <svg class="w-5 h-5"><use href="#${icon}"/></svg>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* --- Employees --- */
+function viewEmployees() {
+  return `
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <div class="relative flex-1 min-w-[180px] max-w-sm">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><use href="#i-search"/></svg>
+        <input class="inp pl-9" placeholder="搜索姓名 / 部门" oninput="filterList('emp-list', this.value)"/>
+      </div>
+      <button class="btn btn-primary ml-auto" onclick="openEmpForm()">
+        <svg class="w-4 h-4"><use href="#i-plus"/></svg>新增员工
+      </button>
+    </div>
+    <div class="card overflow-x-auto">
+      <table class="tbl w-full text-sm" id="emp-list">
+        <thead><tr>
+          <th>姓名</th><th>工号</th><th>部门</th><th>参与项目</th><th class="text-right">操作</th>
+        </tr></thead>
+        <tbody>
+          ${db.employees.map(e => {
+            const memberships = db.memberships.filter(m => m.employeeId === e.id);
+            const totalW = memberships.reduce((s,m)=>s+m.weight,0);
+            const tags = memberships.map(m => {
+              const p = db.projects.find(x=>x.id===m.projectId);
+              const pct = totalW > 0 ? Math.round(m.weight/totalW*100) : 0;
+              return `<span class="badge badge-blue">${esc(p?.name||'?')} · ${pct}%</span>`;
+            }).join(' ');
+            return `
+              <tr data-search="${esc(e.name)} ${esc(e.department||'')} ${esc(e.employeeNo||'')}">
+                <td class="font-semibold">${esc(e.name)}</td>
+                <td class="text-ink-500 num">${esc(e.employeeNo||'—')}</td>
+                <td>${esc(e.department||'—')}</td>
+                <td class="space-x-1">${tags || `<span class="text-ink-400 text-xs">未分配</span>`}</td>
+                <td class="text-right whitespace-nowrap">
+                  <button class="btn btn-ghost !py-1 !px-2 text-xs" onclick="openEmpForm('${e.id}')"><svg class="w-3.5 h-3.5"><use href="#i-edit"/></svg></button>
+                  <button class="btn btn-danger !py-1 !px-2 text-xs" onclick="deleteEmp('${e.id}')"><svg class="w-3.5 h-3.5"><use href="#i-trash"/></svg></button>
+                </td>
+              </tr>
+            `;
+          }).join('') || `<tr><td colspan="5" class="text-center text-ink-400 py-8">还没有员工，点击「新增员工」开始</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function openEmpForm(id) {
+  const e = id ? db.employees.find(x=>x.id===id) : null;
+  modal(`
+    <h3 class="text-lg font-bold mb-4">${e?'编辑':'新增'}员工</h3>
+    <form id="emp-form" class="space-y-3">
+      <div><label class="lbl">姓名 *</label><input class="inp" name="name" required value="${esc(e?.name||'')}"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">工号</label><input class="inp" name="employeeNo" value="${esc(e?.employeeNo||'')}"/></div>
+        <div><label class="lbl">部门</label><input class="inp" name="department" value="${esc(e?.department||'')}"/></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" class="btn btn-ghost" data-x="cancel">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  `, (root, close) => {
+    root.querySelector('[data-x=cancel]').onclick = close;
+    root.querySelector('#emp-form').onsubmit = (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target).entries());
+      if (!fd.name.trim()) return;
+      if (e) Object.assign(e, fd);
+      else db.employees.push({ id: uid('e_'), ...fd });
+      save(); close(); render(); toast(e ? '已更新' : '已新增');
+    };
+  });
+}
+function deleteEmp(id) {
+  const e = db.employees.find(x=>x.id===id);
+  const cnt = db.attendance.filter(a=>a.employeeId===id).length + db.memberships.filter(m=>m.employeeId===id).length;
+  confirmDialog(`确定删除员工「${e.name}」？这将同时删除该员工的 ${cnt} 条相关记录（考勤 + 分配）。`, () => {
+    db.employees = db.employees.filter(x=>x.id!==id);
+    db.attendance = db.attendance.filter(a=>a.employeeId!==id);
+    db.memberships = db.memberships.filter(m=>m.employeeId!==id);
+    save(); render(); toast('已删除');
+  });
+}
+
+/* --- Projects --- */
+function viewProjects() {
+  return `
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <div class="relative flex-1 min-w-[180px] max-w-sm">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><use href="#i-search"/></svg>
+        <input class="inp pl-9" placeholder="搜索项目" oninput="filterList('proj-list', this.value)"/>
+      </div>
+      <button class="btn btn-primary ml-auto" onclick="openProjForm()">
+        <svg class="w-4 h-4"><use href="#i-plus"/></svg>新建项目
+      </button>
+    </div>
+    <div class="card overflow-x-auto">
+      <table class="tbl w-full text-sm" id="proj-list">
+        <thead><tr>
+          <th>项目</th><th>编号</th><th>成员</th><th class="text-right">累计工时</th><th class="text-right">操作</th>
+        </tr></thead>
+        <tbody>
+          ${db.projects.map(p => {
+            const members = db.memberships.filter(m => m.projectId === p.id);
+            const ph = computeProjectHours().get(p.id);
+            const dot = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-2" style="background:${p.color || '#005BAC'}"></span>`;
+            return `
+              <tr data-search="${esc(p.name)} ${esc(p.code||'')}">
+                <td class="font-semibold">${dot}${esc(p.name)}</td>
+                <td class="text-ink-500 num">${esc(p.code||'—')}</td>
+                <td>${members.length}</td>
+                <td class="text-right num font-semibold">${fmt(ph?.hours||0,1)}h</td>
+                <td class="text-right whitespace-nowrap">
+                  <button class="btn btn-ghost !py-1 !px-2 text-xs" onclick="openProjForm('${p.id}')"><svg class="w-3.5 h-3.5"><use href="#i-edit"/></svg></button>
+                  <button class="btn btn-danger !py-1 !px-2 text-xs" onclick="deleteProj('${p.id}')"><svg class="w-3.5 h-3.5"><use href="#i-trash"/></svg></button>
+                </td>
+              </tr>
+            `;
+          }).join('') || `<tr><td colspan="5" class="text-center text-ink-400 py-8">还没有项目</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function openProjForm(id) {
+  const p = id ? db.projects.find(x=>x.id===id) : null;
+  const palette = ['#005BAC','#0E7490','#059669','#B45309','#BE185D','#6D28D9','#DC2626','#334155'];
+  modal(`
+    <h3 class="text-lg font-bold mb-4">${p?'编辑':'新建'}项目</h3>
+    <form id="proj-form" class="space-y-3">
+      <div><label class="lbl">项目名称 *</label><input class="inp" name="name" required value="${esc(p?.name||'')}"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">项目编号</label><input class="inp" name="code" value="${esc(p?.code||'')}"/></div>
+        <div><label class="lbl">预算工时 (h)</label><input type="number" step="0.5" class="inp" name="budgetHours" value="${p?.budgetHours ?? ''}"/></div>
+      </div>
+      <div>
+        <label class="lbl">颜色标识</label>
+        <div class="flex gap-2">
+          ${palette.map(c => `<button type="button" class="w-8 h-8 rounded-lg border-2 ${p?.color===c?'border-slate-900':'border-transparent'}" style="background:${c}" data-color="${c}"></button>`).join('')}
+        </div>
+        <input type="hidden" name="color" value="${p?.color || '#005BAC'}"/>
+      </div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" class="btn btn-ghost" data-x="cancel">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  `, (root, close) => {
+    root.querySelector('[data-x=cancel]').onclick = close;
+    root.querySelectorAll('[data-color]').forEach(b => b.onclick = () => {
+      root.querySelectorAll('[data-color]').forEach(x => x.classList.remove('border-slate-900'));
+      b.classList.add('border-slate-900');
+      root.querySelector('[name=color]').value = b.dataset.color;
+    });
+    root.querySelector('#proj-form').onsubmit = (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target).entries());
+      fd.budgetHours = fd.budgetHours ? Number(fd.budgetHours) : null;
+      if (!fd.name.trim()) return;
+      if (p) Object.assign(p, fd);
+      else db.projects.push({ id: uid('p_'), ...fd });
+      save(); close(); render(); toast(p ? '已更新' : '已新建');
+    };
+  });
+}
+function deleteProj(id) {
+  const p = db.projects.find(x=>x.id===id);
+  const cnt = db.memberships.filter(m=>m.projectId===id).length;
+  confirmDialog(`确定删除项目「${p.name}」？将解除 ${cnt} 名成员的关联（考勤记录保留）。`, () => {
+    db.projects = db.projects.filter(x=>x.id!==id);
+    db.memberships = db.memberships.filter(m=>m.projectId!==id);
+    save(); render(); toast('已删除');
+  });
+}
+
+/* --- Attendance --- */
+function viewAttendance() {
+  const from = sessionStorage.getItem('att.from') || dayjs().subtract(30,'day').format('YYYY-MM-DD');
+  const to = sessionStorage.getItem('att.to') || dayjs().format('YYYY-MM-DD');
+  const empFilter = sessionStorage.getItem('att.emp') || '';
+  const statusFilter = sessionStorage.getItem('att.status') || '';
+
+  let rows = db.attendance.filter(a =>
+    a.date >= from && a.date <= to
+    && (!empFilter || a.employeeId === empFilter)
+    && (!statusFilter || a.status === statusFilter)
+  ).sort((a,b) => b.date.localeCompare(a.date) || empName(a.employeeId).localeCompare(empName(b.employeeId), 'zh'));
+
+  return `
+    <!-- Import strip -->
+    <div class="card p-4 md:p-5 mb-4 flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2 text-brand-500">
+        <svg class="w-5 h-5"><use href="#i-upload"/></svg>
+        <span class="font-semibold">导入月报 (.xlsx)</span>
+      </div>
+      <p class="text-sm text-ink-500 flex-1 min-w-[200px]">
+        支持钉钉 / 企业微信导出的矩阵式考勤月报。班次 <span class="font-semibold text-ink-700 num">09:35 – 17:30</span>。
+      </p>
+      <label class="btn btn-primary cursor-pointer">
+        <svg class="w-4 h-4"><use href="#i-upload"/></svg>
+        选择 Excel 文件
+        <input type="file" accept=".xlsx,.xls" hidden onchange="importExcel(this.files[0])"/>
+      </label>
+      <button class="btn btn-ghost" onclick="openAttForm()"><svg class="w-4 h-4"><use href="#i-plus"/></svg>手动录入</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-4 flex flex-wrap gap-3 items-end">
+      <div><label class="lbl">起始日期</label><input type="date" class="inp" value="${from}" onchange="setAttFilter('from', this.value)"/></div>
+      <div><label class="lbl">结束日期</label><input type="date" class="inp" value="${to}" onchange="setAttFilter('to', this.value)"/></div>
+      <div class="flex-1 min-w-[160px]">
+        <label class="lbl">员工</label>
+        <select class="inp" onchange="setAttFilter('emp', this.value)">
+          <option value="">全部</option>
+          ${db.employees.map(e => `<option value="${e.id}" ${empFilter===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="lbl">状态</label>
+        <select class="inp" onchange="setAttFilter('status', this.value)">
+          <option value="">全部</option>
+          <option value="normal" ${statusFilter==='normal'?'selected':''}>正常</option>
+          <option value="late" ${statusFilter==='late'?'selected':''}>迟到</option>
+          <option value="early" ${statusFilter==='early'?'selected':''}>早退</option>
+          <option value="late_and_early" ${statusFilter==='late_and_early'?'selected':''}>迟到+早退</option>
+          <option value="absent" ${statusFilter==='absent'?'selected':''}>缺卡</option>
+        </select>
+      </div>
+      <div class="ml-auto text-sm text-ink-500">共 <span class="font-semibold text-ink-700 num">${rows.length}</span> 条</div>
+    </div>
+
+    <div class="card overflow-x-auto">
+      <table class="tbl w-full text-sm">
+        <thead><tr>
+          <th>日期</th><th>员工</th><th>上班</th><th>下班</th><th class="text-right">工时</th><th>状态</th><th class="text-right">操作</th>
+        </tr></thead>
+        <tbody>
+          ${rows.slice(0, 200).map(a => `
+            <tr>
+              <td class="num">${a.date}</td>
+              <td class="font-semibold">${esc(empName(a.employeeId))}</td>
+              <td class="num">${a.clockIn || '—'}</td>
+              <td class="num">${a.clockOut || '—'}</td>
+              <td class="text-right num font-semibold">${fmt(a.workHours,1)}h</td>
+              <td>${statusBadge(a.status)}</td>
+              <td class="text-right whitespace-nowrap">
+                <button class="btn btn-ghost !py-1 !px-2 text-xs" onclick="openAttForm('${a.id}')"><svg class="w-3.5 h-3.5"><use href="#i-edit"/></svg></button>
+                <button class="btn btn-danger !py-1 !px-2 text-xs" onclick="deleteAtt('${a.id}')"><svg class="w-3.5 h-3.5"><use href="#i-trash"/></svg></button>
+              </td>
+            </tr>
+          `).join('') || `<tr><td colspan="7" class="text-center text-ink-400 py-8">该筛选条件下无数据</td></tr>`}
+          ${rows.length > 200 ? `<tr><td colspan="7" class="text-center text-ink-400 py-3 text-xs">仅显示前 200 条，缩小日期范围以查看更多</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function setAttFilter(k, v) { sessionStorage.setItem('att.'+k, v); render(); }
+
+function openAttForm(id) {
+  const a = id ? db.attendance.find(x=>x.id===id) : null;
+  modal(`
+    <h3 class="text-lg font-bold mb-4">${a?'编辑':'录入'}考勤</h3>
+    <form id="att-form" class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">员工 *</label>
+          <select class="inp" name="employeeId" required>
+            <option value="">选择员工</option>
+            ${db.employees.map(e => `<option value="${e.id}" ${a?.employeeId===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="lbl">日期 *</label><input type="date" class="inp" name="date" required value="${a?.date || dayjs().format('YYYY-MM-DD')}"/></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">上班 (HH:MM)</label><input type="time" class="inp" name="clockIn" value="${a?.clockIn||''}"/></div>
+        <div><label class="lbl">下班 (HH:MM)</label><input type="time" class="inp" name="clockOut" value="${a?.clockOut||''}"/></div>
+      </div>
+      <div><label class="lbl">备注</label><input class="inp" name="note" value="${esc(a?.note||'')}"/></div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" class="btn btn-ghost" data-x="cancel">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  `, (root, close) => {
+    root.querySelector('[data-x=cancel]').onclick = close;
+    root.querySelector('#att-form').onsubmit = (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target).entries());
+      const daily = computeDaily({ clockIn: fd.clockIn, clockOut: fd.clockOut });
+      const rec = {
+        employeeId: fd.employeeId, date: fd.date, note: fd.note,
+        clockIn: daily.clockIn, clockOut: daily.clockOut, workHours: daily.workHours,
+        status: daily.status, isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave,
+      };
+      if (a) Object.assign(a, rec);
+      else db.attendance.push({ id: uid('a_'), ...rec });
+      save(); close(); render(); toast(a ? '已更新' : '已记录');
+    };
+  });
+}
+function deleteAtt(id) {
+  db.attendance = db.attendance.filter(x=>x.id!==id);
+  save(); render(); toast('已删除');
+}
+
+/* --- Excel import --- */
+async function importExcel(file) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+    const range = inferDateRange(file.name, wb.SheetNames[0]);
+    if (!range) throw new Error('无法从文件名 / 表名识别日期范围，示例：考勤月报-2026年06月08日至2026年07月07日-*.xlsx');
+    const headerIdx = rows.findIndex(r => r && String(r[0]).includes('帐号'));
+    if (headerIdx < 0) throw new Error('未找到表头行（第一列应为「帐号」）');
+    const colDate = buildColumnDates(rows[headerIdx], range.startDate);
+    const dateCols = Object.keys(colDate).map(Number);
+
+    let addedEmp = 0, upsertRec = 0, skipped = 0;
+    for (let i = headerIdx + 2; i < rows.length; i += 2) {
+      const rIn = rows[i]; const rOut = rows[i+1] || [];
+      if (!rIn) continue;
+      const name = String(rIn[2] || '').trim();
+      if (!name) continue;
+      const department = String(rIn[3] || '').trim();
+      const employeeNo = String(rIn[1] || '').trim();
+      // Find or create employee
+      let emp = db.employees.find(e => e.name === name);
+      if (!emp) { emp = { id: uid('e_'), name, department, employeeNo }; db.employees.push(emp); addedEmp++; }
+      else {
+        if (!emp.department && department) emp.department = department;
+        if (!emp.employeeNo && employeeNo) emp.employeeNo = employeeNo;
+      }
+      for (const c of dateCols) {
+        const clockIn = String(rIn[c] || '').trim() || null;
+        const clockOut = String(rOut[c] || '').trim() || null;
+        if (!clockIn && !clockOut) { skipped++; continue; }
+        const daily = computeDaily({ clockIn, clockOut });
+        // Upsert by (employeeId, date)
+        const key = a => a.employeeId === emp.id && a.date === colDate[c];
+        const existing = db.attendance.find(key);
+        const rec = {
+          employeeId: emp.id, date: colDate[c],
+          clockIn: daily.clockIn, clockOut: daily.clockOut, workHours: daily.workHours,
+          status: daily.status, isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave,
+        };
+        if (existing) Object.assign(existing, rec);
+        else db.attendance.push({ id: uid('a_'), ...rec });
+        upsertRec++;
+      }
+    }
+    save(); render();
+    toast(`导入完成：${upsertRec} 条考勤，${addedEmp} 位新员工`);
+  } catch (e) {
+    console.error(e);
+    modal(`
+      <h3 class="text-lg font-bold text-red-600 mb-3">导入失败</h3>
+      <p class="text-ink-500 text-sm mb-4">${esc(e.message || String(e))}</p>
+      <p class="text-xs text-ink-400 mb-4">要求：矩阵式月报，表头首列为「帐号」，含 08/一 09/二 … 日期列；日期范围可从文件名或工作表名识别，如 <code>考勤月报-2026年06月08日至2026年07月07日</code>。</p>
+      <div class="flex justify-end"><button class="btn btn-primary" onclick="this.closest('.modal-backdrop').remove()">知道了</button></div>
+    `);
+  }
+}
+function inferDateRange(...names) {
+  const re = /(\d{4})年(\d{2})月(\d{2})日至(\d{4})年(\d{2})月(\d{2})日/;
+  for (const n of names) {
+    const m = String(n||'').match(re);
+    if (m) return { startDate: `${m[1]}-${m[2]}-${m[3]}`, endDate: `${m[4]}-${m[5]}-${m[6]}` };
+  }
+  return null;
+}
+function buildColumnDates(headerRow, startDate) {
+  const map = {};
+  let cursor = dayjs(startDate);
+  // Find the first date-like header column (contains "/")
+  let firstCol = -1;
+  for (let c = 0; c < headerRow.length; c++) {
+    const cell = String(headerRow[c]||'').trim();
+    if (/^\d{1,2}\/./.test(cell)) { firstCol = c; break; }
+  }
+  if (firstCol < 0) firstCol = 10; // fallback to canonical index
+  map[firstCol] = cursor.format('YYYY-MM-DD');
+  let prevDay = cursor.date();
+  for (let c = firstCol + 1; c < headerRow.length; c++) {
+    const cell = String(headerRow[c] || '').trim();
+    if (!cell) break;
+    const dayNum = parseInt(cell.split('/')[0], 10);
+    if (Number.isNaN(dayNum)) break;
+    if (dayNum < prevDay) cursor = cursor.add(1, 'month').date(dayNum);
+    else cursor = cursor.date(dayNum);
+    map[c] = cursor.format('YYYY-MM-DD');
+    prevDay = dayNum;
+  }
+  return map;
+}
+
+/* --- Allocation --- */
+function viewAllocation() {
+  return `
+    <p class="text-sm text-ink-500 mb-4">拖动滑块调整员工在各项目的<b class="text-ink-700">工时权重</b>；系统自动归一化到 100%，考勤工时会按权重分摊到项目。</p>
+    <div class="space-y-4">
+      ${db.employees.map(e => {
+        const rows = db.memberships.filter(m => m.employeeId === e.id);
+        const total = rows.reduce((s,r)=>s+r.weight, 0);
+        return `
+          <div class="card p-4 md:p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="font-bold">${esc(e.name)}</div>
+                <div class="text-xs text-ink-400">${esc(e.department||'')}</div>
+              </div>
+              <button class="btn btn-ghost text-xs" onclick="openMembershipForm('${e.id}')"><svg class="w-3.5 h-3.5"><use href="#i-plus"/></svg>加入项目</button>
+            </div>
+            ${rows.length === 0 ? `<div class="text-sm text-ink-400 py-3">未加入任何项目</div>` : `
+              <div class="space-y-3">
+                ${rows.map(m => {
+                  const p = db.projects.find(x=>x.id===m.projectId);
+                  const pct = total > 0 ? Math.round(m.weight/total*100) : 0;
+                  return `
+                    <div>
+                      <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="flex items-center gap-2">
+                          <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${p?.color||'#005BAC'}"></span>
+                          <span class="font-semibold">${esc(p?.name||'?')}</span>
+                          <input class="inp !py-0.5 !px-2 text-xs w-24" placeholder="角色" value="${esc(m.role||'')}" onchange="updateMembership('${m.id}', 'role', this.value)"/>
+                        </span>
+                        <span class="flex items-center gap-2">
+                          <span class="font-bold num text-brand-500">${pct}%</span>
+                          <button class="text-red-500 hover:text-red-700" onclick="deleteMembership('${m.id}')" title="移除">
+                            <svg class="w-4 h-4"><use href="#i-trash"/></svg>
+                          </button>
+                        </span>
+                      </div>
+                      <input type="range" min="0" max="100" step="1" value="${Math.round(m.weight*100)}"
+                        class="w-slider w-full" oninput="updateMembership('${m.id}', 'weight', this.value/100)"/>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </div>
+        `;
+      }).join('') || `<div class="card p-6 text-center text-ink-400">请先添加员工</div>`}
+    </div>
+  `;
+}
+function openMembershipForm(employeeId) {
+  const emp = db.employees.find(e=>e.id===employeeId);
+  const existing = db.memberships.filter(m => m.employeeId === employeeId).map(m => m.projectId);
+  const avail = db.projects.filter(p => !existing.includes(p.id));
+  if (avail.length === 0) return toast('已加入全部项目');
+  modal(`
+    <h3 class="text-lg font-bold mb-4">为「${esc(emp.name)}」加入项目</h3>
+    <form id="ms-form" class="space-y-3">
+      <div>
+        <label class="lbl">项目</label>
+        <select class="inp" name="projectId" required>
+          ${avail.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">角色</label><input class="inp" name="role" placeholder="e.g. 开发 / 设计"/></div>
+        <div><label class="lbl">初始权重 (%)</label><input type="number" class="inp" name="weight" value="50" min="0" max="100"/></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" class="btn btn-ghost" data-x="cancel">取消</button>
+        <button type="submit" class="btn btn-primary">加入</button>
+      </div>
+    </form>
+  `, (root, close) => {
+    root.querySelector('[data-x=cancel]').onclick = close;
+    root.querySelector('#ms-form').onsubmit = (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target).entries());
+      db.memberships.push({
+        id: uid('m_'), employeeId, projectId: fd.projectId,
+        role: fd.role || '', weight: clamp(Number(fd.weight)/100, 0, 1),
+        startDate: dayjs().format('YYYY-MM-DD'),
+      });
+      save(); close(); render(); toast('已加入');
+    };
+  });
+}
+function updateMembership(id, field, val) {
+  const m = db.memberships.find(x=>x.id===id);
+  if (!m) return;
+  if (field === 'weight') m.weight = clamp(Number(val), 0, 1);
+  else m[field] = val;
+  save();
+  // Re-render just the employee card if weight, else full for role
+  if (field === 'weight') {
+    // Debounce full render to keep the slider smooth
+    clearTimeout(updateMembership._t);
+    updateMembership._t = setTimeout(() => render(), 300);
+  } else {
+    render();
+  }
+}
+function deleteMembership(id) {
+  db.memberships = db.memberships.filter(m=>m.id!==id);
+  save(); render(); toast('已移除');
+}
+
+/* --- Analytics --- */
+function computeProjectHours() {
+  // Map<projectId, {projectId, hours, days}>
+  const out = new Map();
+  for (const log of db.attendance) {
+    if (!log.workHours) continue;
+    const memberships = db.memberships.filter(m => m.employeeId === log.employeeId);
+    const total = memberships.reduce((s,m)=>s+(m.weight||0), 0);
+    if (total <= 0) continue;
+    for (const m of memberships) {
+      const share = (m.weight || 0) / total;
+      const hours = Math.round(log.workHours * share * 100) / 100;
+      const cur = out.get(m.projectId) || { projectId: m.projectId, hours: 0, days: 0 };
+      cur.hours = Math.round((cur.hours + hours) * 100) / 100;
+      cur.days += 1;
+      out.set(m.projectId, cur);
+    }
+  }
+  return out;
+}
+function viewAnalytics() {
+  const projHours = [...computeProjectHours().values()].sort((a,b)=>b.hours-a.hours);
+  // Employee ranking
+  const empHours = db.employees.map(e => {
+    const h = db.attendance.filter(a => a.employeeId === e.id).reduce((s,a)=>s+(a.workHours||0), 0);
+    return { emp: e, hours: Math.round(h*100)/100 };
+  }).sort((a,b)=>b.hours-a.hours);
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div class="card p-5">
+        <h3 class="font-bold mb-4">项目工时分布</h3>
+        ${projHours.length === 0 ? `<div class="text-ink-400 text-sm py-6 text-center">暂无数据</div>` : `<div class="h-72"><canvas id="chart-pie"></canvas></div>`}
+      </div>
+      <div class="card p-5">
+        <h3 class="font-bold mb-4">员工工时排行</h3>
+        ${empHours.length === 0 ? `<div class="text-ink-400 text-sm py-6 text-center">暂无数据</div>` : `<div class="h-72"><canvas id="chart-bar"></canvas></div>`}
+      </div>
+    </div>
+
+    <div class="card p-5">
+      <h3 class="font-bold mb-3">项目详情</h3>
+      <div class="overflow-x-auto">
+        <table class="tbl w-full text-sm">
+          <thead><tr><th>项目</th><th class="text-right">累计工时</th><th class="text-right">占比</th><th class="text-right">预算工时</th><th class="text-right">进度</th></tr></thead>
+          <tbody>
+            ${projHours.map(ph => {
+              const p = db.projects.find(x=>x.id===ph.projectId);
+              const total = projHours.reduce((s,x)=>s+x.hours, 0) || 1;
+              const share = Math.round(ph.hours/total*100);
+              const budget = p?.budgetHours;
+              const progress = budget ? Math.round(ph.hours/budget*100) : null;
+              return `
+                <tr>
+                  <td class="font-semibold">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full mr-2" style="background:${p?.color||'#005BAC'}"></span>
+                    ${esc(p?.name||'?')}
+                  </td>
+                  <td class="text-right num font-semibold">${fmt(ph.hours,1)}h</td>
+                  <td class="text-right num">${share}%</td>
+                  <td class="text-right num text-ink-500">${budget ? fmt(budget,1)+'h' : '—'}</td>
+                  <td class="text-right">
+                    ${progress != null ? `
+                      <div class="inline-flex items-center gap-2">
+                        <div class="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div class="h-full rounded-full" style="width:${Math.min(progress,100)}%;background:${progress>100?'#DC2626':(p?.color||'#005BAC')}"></div>
+                        </div>
+                        <span class="text-xs num ${progress>100?'text-red-500 font-bold':'text-ink-500'}">${progress}%</span>
+                      </div>
+                    ` : '<span class="text-ink-400">—</span>'}
+                  </td>
+                </tr>
+              `;
+            }).join('') || `<tr><td colspan="5" class="text-center text-ink-400 py-6">暂无数据</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+/* --- Help --- */
+function viewHelp() {
+  return `
+    <div class="card p-6 md:p-8 space-y-8">
+      <section>
+        <h2 class="text-xl font-bold flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-brand-500"><use href="#i-help"/></svg>快速上手</h2>
+        <ol class="list-decimal ml-6 space-y-1.5 text-sm text-ink-700">
+          <li><b>员工</b> → 新增员工，或直接在「考勤」里导入月报（会自动创建员工）。</li>
+          <li><b>项目</b> → 新建项目，填写名称、编号、可选预算工时。</li>
+          <li><b>分配</b> → 为员工分配项目并拖动权重滑块（自动归一化到 100%）。</li>
+          <li><b>考勤</b> → 导入 <code class="bg-slate-100 px-1 rounded">.xlsx</code> 月报或手动录入；系统按 09:35–17:30 判定迟到/早退。</li>
+          <li><b>分析</b> → 查看项目工时分摊、员工工时排行、预算进度。</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-brand-500"><use href="#i-cloud"/></svg>如何在电脑 / 手机间同步（OneDrive 方案）</h2>
+        <p class="text-sm text-ink-500 mb-3">这个网页应用不依赖服务器，数据存在浏览器里。跨设备使用推荐用<b>「文件 + 云盘」</b>方案，最省心：</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="border border-slate-200 rounded-xl p-4">
+            <div class="font-bold mb-2 text-brand-500">① 保存 index.html 到 OneDrive</div>
+            <ol class="list-decimal ml-5 text-sm space-y-1 text-ink-700">
+              <li>把 <code class="bg-slate-100 px-1 rounded">index.html</code> 放进 <code class="bg-slate-100 px-1 rounded">OneDrive\\ManagementPlatform\\</code>。</li>
+              <li>Windows：右键 → 用 Chrome / Edge 打开即可。</li>
+              <li>手机端：OneDrive App 里点这个文件 → 「用其他应用打开」→ 选浏览器。</li>
+            </ol>
+          </div>
+          <div class="border border-slate-200 rounded-xl p-4">
+            <div class="font-bold mb-2 text-brand-500">② 用「导出 / 导入」搬运数据</div>
+            <ol class="list-decimal ml-5 text-sm space-y-1 text-ink-700">
+              <li>右上角 <b>导出</b> → 生成 <code class="bg-slate-100 px-1 rounded">mp-data-YYYYMMDD.json</code>。</li>
+              <li>把它存到同一个 OneDrive 目录（自动同步）。</li>
+              <li>换设备打开 index.html → 右上角 <b>导入</b> → 选那个 JSON，即完成同步。</li>
+            </ol>
+          </div>
+        </div>
+        <div class="mt-4 p-3 rounded-lg bg-brand-50 border border-brand-100 text-sm text-brand-700">
+          <b>建议：</b>每天工作结束前点一下「导出」覆盖上次的 JSON，形成日常习惯；或每次修改后立即导出。
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-brand-500"><use href="#i-upload"/></svg>Excel 月报格式说明</h2>
+        <ul class="list-disc ml-6 text-sm space-y-1 text-ink-700">
+          <li>钉钉 / 企业微信导出的<b>矩阵式</b>考勤月报，无需改动。</li>
+          <li>表头首列须为「帐号」，姓名在第 3 列、部门第 4 列；日期列形如 <code class="bg-slate-100 px-1 rounded">08/一</code>。</li>
+          <li>每位员工占两行：上一行是<b>签到</b>时间，下一行是<b>签退</b>时间。</li>
+          <li>文件名或工作表名需含日期范围，例如 <code class="bg-slate-100 px-1 rounded">考勤月报-2026年06月08日至2026年07月07日-*.xlsx</code>。</li>
+          <li>同一 (员工, 日期) 再次导入会<b>更新</b>而不是重复插入。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold mb-2">工时分摊规则</h2>
+        <p class="text-sm text-ink-500">
+          某天的工时 = 下班 − 上班（不扣午休；如需扣午休可在录入时手动调整）。<br/>
+          项目工时 = 该日工时 × <span class="font-semibold">归一化权重</span>。<br/>
+          例：员工 A 参与项目 X (50%) + Y (30%)，某日 8 小时 → X 得 5h，Y 得 3h。
+        </p>
+      </section>
+
+      <section class="pt-4 border-t border-slate-100">
+        <h2 class="text-xl font-bold mb-3 text-red-600">危险操作</h2>
+        <button class="btn btn-danger" onclick="wipeAll()">清空所有本地数据</button>
+        <p class="text-xs text-ink-400 mt-2">仅清除本浏览器里的数据，不影响你导出过的 JSON 文件。</p>
+      </section>
+    </div>
+  `;
+}
+
+/* ---------------- Helpers ---------------- */
+function empName(id) { return db.employees.find(e=>e.id===id)?.name || '（已删除）'; }
+function statusBadge(s) {
+  const map = {
+    normal: ['badge-green', '正常'],
+    late: ['badge-amber', '迟到'],
+    early: ['badge-amber', '早退'],
+    late_and_early: ['badge-red', '迟到+早退'],
+    absent: ['badge-slate', '缺卡'],
+  };
+  const [cls, label] = map[s] || ['badge-slate', s || '—'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function filterList(tableId, q) {
+  q = q.trim().toLowerCase();
+  $$('#' + tableId + ' tbody tr').forEach(tr => {
+    const s = (tr.dataset.search || tr.textContent).toLowerCase();
+    tr.style.display = !q || s.includes(q) ? '' : 'none';
+  });
+}
+function wipeAll() {
+  confirmDialog('确定要清空所有本地数据吗？此操作不可恢复。建议先导出一份 JSON。', () => {
+    localStorage.removeItem(STORAGE_KEY);
+    db = defaultStore();
+    save(); render(); toast('已清空');
+  });
+}
+
+/* ---------------- Import / Export ---------------- */
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mp-data-${dayjs().format('YYYYMMDD-HHmm')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('已导出 JSON');
+}
+async function importDataFile(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (typeof data !== 'object' || !Array.isArray(data.employees)) throw new Error('文件格式不符');
+    confirmDialog(`即将用文件内容覆盖当前本地数据（员工 ${data.employees.length} · 项目 ${data.projects?.length||0} · 考勤 ${data.attendance?.length||0}）。是否继续？`, () => {
+      db = { ...defaultStore(), ...data };
+      save(); render(); toast('已导入');
+    });
+  } catch (e) {
+    toast('导入失败：' + (e.message || '未知错误'));
+  }
+}
+
+/* ---------------- Render ---------------- */
+function render() {
+  const r = currentRoute();
+  const views = { dashboard: viewDashboard, employees: viewEmployees, projects: viewProjects,
+                  attendance: viewAttendance, allocation: viewAllocation, analytics: viewAnalytics, help: viewHelp };
+  $('#app').innerHTML = shell(views[r]());
+  // Post-render chart hooks
+  if (r === 'dashboard') mountDashboardChart();
+  if (r === 'analytics') mountAnalyticsCharts();
+}
+
+function mountDashboardChart() {
+  const canvas = document.getElementById('chart-daily'); if (!canvas) return;
+  const last14 = [...Array(14)].map((_,i) => dayjs().subtract(13-i, 'day').format('MM-DD'));
+  const dailyHours = [...Array(14)].map((_,i) => {
+    const d = dayjs().subtract(13-i, 'day').format('YYYY-MM-DD');
+    return db.attendance.filter(a=>a.date===d).reduce((s,a)=>s+(a.workHours||0), 0);
+  });
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: last14,
+      datasets: [{
+        data: dailyHours,
+        borderColor: '#005BAC', backgroundColor: 'rgba(0,91,172,.12)',
+        fill: true, tension: 0.35, borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#005BAC',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y.toFixed(1) + 'h' } } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 20, color: '#94A3B8', font:{size:11} }, grid: { color: '#EEF2F7' } },
+                x: { ticks: { color: '#94A3B8', font:{size:11}, maxRotation:0 }, grid: { display: false } } },
+    },
+  });
+}
+function mountAnalyticsCharts() {
+  const projHours = [...computeProjectHours().values()].sort((a,b)=>b.hours-a.hours);
+  const pieCanvas = document.getElementById('chart-pie');
+  if (pieCanvas && projHours.length) {
+    new Chart(pieCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: projHours.map(p => db.projects.find(x=>x.id===p.projectId)?.name || '?'),
+        datasets: [{
+          data: projHours.map(p => p.hours),
+          backgroundColor: projHours.map(p => db.projects.find(x=>x.id===p.projectId)?.color || '#005BAC'),
+          borderWidth: 2, borderColor: '#fff',
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels:{ font:{size:12}, boxWidth: 12 } },
+                   tooltip: { callbacks: { label: c => c.label + ': ' + c.parsed.toFixed(1) + 'h' } } },
+        cutout: '55%',
+      },
+    });
+  }
+  const barCanvas = document.getElementById('chart-bar');
+  const empHours = db.employees.map(e => {
+    const h = db.attendance.filter(a => a.employeeId === e.id).reduce((s,a)=>s+(a.workHours||0), 0);
+    return { name: e.name, hours: Math.round(h*100)/100 };
+  }).sort((a,b)=>b.hours-a.hours).slice(0, 10);
+  if (barCanvas && empHours.length) {
+    new Chart(barCanvas, {
+      type: 'bar',
+      data: {
+        labels: empHours.map(e => e.name),
+        datasets: [{ data: empHours.map(e => e.hours), backgroundColor: '#4292D0', borderRadius: 6 }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.x.toFixed(1) + 'h' } } },
+        scales: { x: { beginAtZero: true, ticks: { color: '#94A3B8', font:{size:11} }, grid: { color: '#EEF2F7' } },
+                  y: { ticks: { color: '#334155', font:{size:12} }, grid: { display: false } } },
+      },
+    });
+  }
+}
+
+/* ---------------- Boot ---------------- */
+render();
+
+// Expose to inline handlers
+Object.assign(window, {
+  openEmpForm, deleteEmp, openProjForm, deleteProj,
+  openAttForm, deleteAtt, importExcel, setAttFilter,
+  openMembershipForm, updateMembership, deleteMembership,
+  exportData, importDataFile, filterList, wipeAll,
+});
+</script>
+</body>
+</html>
