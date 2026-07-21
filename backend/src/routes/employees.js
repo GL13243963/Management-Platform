@@ -1,5 +1,5 @@
 const express = require('express');
-const { Employee } = require('../models');
+const { db, Employee } = require('../models');
 const router = express.Router();
 
 router.get('/', (req, res) => res.json(Employee.all()));
@@ -16,7 +16,16 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  Employee.destroy(req.params.id);
+  const emp = Employee.find(req.params.id);
+  if (!emp) return res.status(404).json({ error: 'not found' });
+  const attendanceCount = db.prepare('SELECT COUNT(*) AS count FROM attendance_logs WHERE employeeId=?').get(emp.id).count;
+  const membershipCount = db.prepare('SELECT COUNT(*) AS count FROM project_memberships WHERE employeeId=?').get(emp.id).count;
+  if (attendanceCount || membershipCount) {
+    return res.status(409).json({
+      error: '该员工已有考勤或项目历史，不能删除，可将其设为停用',
+    });
+  }
+  Employee.destroy(emp.id);
   res.json({ ok: true });
 });
 

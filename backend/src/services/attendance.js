@@ -26,10 +26,19 @@ function computeDaily({ clockIn, clockOut }) {
   const inT = parseTime(clockIn);
   const outT = parseTime(clockOut);
 
-  if (!inT || !outT) {
+  // 只有上班和下班都没打卡才算缺勤
+  if (!inT && !outT) {
     return {
       clockIn: inT, clockOut: outT,
       workHours: 0, isLate: false, isEarlyLeave: false, status: 'absent',
+    };
+  }
+
+  // 如果只有一边没打卡，不算缺勤，但工时为0
+  if (!inT || !outT) {
+    return {
+      clockIn: inT, clockOut: outT,
+      workHours: 0, isLate: false, isEarlyLeave: false, status: 'normal',
     };
   }
 

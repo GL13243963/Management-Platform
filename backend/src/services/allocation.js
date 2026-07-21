@@ -20,7 +20,8 @@ function distributeHours(log) {
 
 /** Aggregate hours grouped by project across a date range. */
 function aggregateProjectHours({ startDate, endDate, employeeId, projectId } = {}) {
-  const logs = AttendanceLog.query({ startDate, endDate, employeeId });
+  // Analytics must not inherit the 2000-row pagination cap used by the list view.
+  const logs = AttendanceLog.queryAll({ startDate, endDate, employeeId });
   const projMap = new Map();
   for (const log of logs) {
     for (const p of distributeHours(log)) {

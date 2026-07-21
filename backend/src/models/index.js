@@ -19,7 +19,7 @@ function buildUpdate(table, patch, allowedCols, touchUpdatedAt = true) {
 }
 
 /** Employees */
-const EMP_COLS = ['name', 'employeeNo', 'department', 'position', 'hourlyRate', 'active'];
+const EMP_COLS = ['name', 'employeeNo', 'department', 'team', 'position', 'hourlyRate', 'active'];
 const Employee = {
   all() {
     return db.prepare('SELECT * FROM employees ORDER BY id ASC').all()
@@ -29,12 +29,13 @@ const Employee = {
   findByName(name) { return boolify(db.prepare('SELECT * FROM employees WHERE name=?').get(name), ['active']); },
   create(data) {
     const info = db.prepare(
-      `INSERT INTO employees (name, employeeNo, department, position, hourlyRate, active)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO employees (name, employeeNo, department, team, position, hourlyRate, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       data.name,
       data.employeeNo ?? null,
       data.department ?? null,
+      data.team ?? null,
       data.position ?? null,
       data.hourlyRate ?? 0,
       data.active === false ? 0 : 1,
@@ -143,7 +144,7 @@ const AttendanceLog = {
     }
     const info = db.prepare(`
       INSERT INTO attendance_logs (employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave)
-      VALUES (?,?,?,?,?,?,?,?,?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate?1:0, isEarlyLeave?1:0);
     return { row: this.find(Number(info.lastInsertRowid)), created: true };
   },
@@ -156,12 +157,25 @@ const AttendanceLog = {
     const where = [];
     const params = [];
     if (startDate) { where.push('date >= ?'); params.push(startDate); }
-    if (endDate)   { where.push('date <= ?'); params.push(endDate); }
+    if (endDate) { where.push('date <= ?'); params.push(endDate); }
     if (employeeId) { where.push('employeeId = ?'); params.push(Number(employeeId)); }
-    if (status)    { where.push('status = ?'); params.push(status); }
+    if (status) { where.push('status = ?'); params.push(status); }
     const sql = `SELECT * FROM attendance_logs
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY date DESC, employeeName ASC LIMIT 2000`;
+    return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave']));
+  },
+  /** 查询所有记录（无LIMIT，用于统计） */
+  queryAll({ startDate, endDate, employeeId, status } = {}) {
+    const where = [];
+    const params = [];
+    if (startDate) { where.push('date >= ?'); params.push(startDate); }
+    if (endDate) { where.push('date <= ?'); params.push(endDate); }
+    if (employeeId) { where.push('employeeId = ?'); params.push(Number(employeeId)); }
+    if (status) { where.push('status = ?'); params.push(status); }
+    const sql = `SELECT * FROM attendance_logs
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY date DESC, employeeName ASC`;
     return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave']));
   },
 };
@@ -171,7 +185,7 @@ const Adjustment = {
   create(data) {
     const info = db.prepare(`
       INSERT INTO adjustments (attendanceLogId, employeeId, date, type, reason, operator)
-      VALUES (?,?,?,?,?,?)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       data.attendanceLogId ?? null, data.employeeId ?? null, data.date ?? null,
       data.type ?? null, data.reason ?? null, data.operator ?? 'admin',

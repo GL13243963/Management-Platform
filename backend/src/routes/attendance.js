@@ -52,12 +52,22 @@ function isMonthlyReportFormat(filePath) {
   const wb = XLSX.readFile(filePath);
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
-  // Signature: a row whose first cell is "帐号" and has 10+ date-like headers.
-  const idx = rows.findIndex(r => r && r[0] === '帐号');
-  if (idx < 0) return false;
-  const header = rows[idx];
-  const dateLike = header.slice(10).filter(v => /^\d{1,2}\/[一二三四五六日]/.test(String(v))).length;
-  return dateLike >= 5;
+  // Signature: a row whose first cell is "姓名" or "帐号" and has date-like headers.
+  let idx = rows.findIndex(r => r && (String(r[0]) === '姓名' || String(r[0]) === '帐号'));
+  if (idx >= 0) {
+    const header = rows[idx];
+    const dateLike = header.slice(9).filter(v => /^\d{1,2}\/[一二三四五六日]/.test(String(v))).length;
+    return dateLike >= 5;
+  }
+  // Alternative check: look for any row with date-like headers from column 9
+  for (let i = 0; i < Math.min(20, rows.length); i++) {
+    const row = rows[i];
+    if (row && row.length > 11) {
+      const dateLike = row.slice(9).filter(v => /^\d{1,2}\/[一二三四五六日]/.test(String(v))).length;
+      if (dateLike >= 5) return true;
+    }
+  }
+  return false;
 }
 
 async function importMonthlyReport(filePath) {
@@ -109,19 +119,27 @@ function importRowFormat(filePath) {
 }
 
 router.post('/import', upload.single('file'), async (req, res) => {
+  let uploadedPath = null;
   try {
     if (!req.file) return res.status(400).json({ error: 'no file' });
+    uploadedPath = req.file.path;
+
     let result;
-    if (isMonthlyReportFormat(req.file.path)) {
+    const isMonthly = isMonthlyReportFormat(req.file.path);
+
+    if (isMonthly) {
       result = await importMonthlyReport(req.file.path);
     } else {
       result = importRowFormat(req.file.path);
     }
-    try { fs.unlinkSync(req.file.path); } catch {}
-    res.json({ ok: true, ...result });
+    res.json({ ok: true, format: isMonthly ? 'monthly' : 'row', ...result });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  } finally {
+    if (uploadedPath) {
+      try { fs.unlinkSync(uploadedPath); } catch {}
+    }
   }
 });
 

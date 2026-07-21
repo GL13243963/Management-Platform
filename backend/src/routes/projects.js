@@ -3,6 +3,11 @@ const dayjs = require('dayjs');
 const { db, Project, ProjectMembership } = require('../models');
 const router = express.Router();
 
+function isIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  return dayjs(value).format('YYYY-MM-DD') === value;
+}
+
 router.get('/', (req, res) => res.json(Project.all()));
 
 // Wraps output rows to look like { ...pm, Employee: {...} } for the frontend.
@@ -17,15 +22,20 @@ function decorateMembership(row) {
 router.post('/', (req, res) => {
   try {
     const { members = [], ...rest } = req.body;
-    const project = Project.create(rest);
-    const today = dayjs().format('YYYY-MM-DD');
-    for (const m of members) {
-      ProjectMembership.create({
-        projectId: project.id, employeeId: m.employeeId,
-        weight: m.weight ?? 1.0, role: m.role ?? 'member',
-        effectiveFrom: m.effectiveFrom || today,
-      });
-    }
+    if (!rest.name || !String(rest.name).trim()) return res.status(400).json({ error: 'name is required' });
+    const createProject = db.transaction(() => {
+      const project = Project.create(rest);
+      const today = dayjs().format('YYYY-MM-DD');
+      for (const m of members) {
+        ProjectMembership.create({
+          projectId: project.id, employeeId: m.employeeId,
+          weight: m.weight ?? 1.0, role: m.role ?? 'member',
+          effectiveFrom: m.effectiveFrom || today,
+        });
+      }
+      return project;
+    });
+    const project = createProject();
     res.json(project);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -37,7 +47,13 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  Project.destroy(req.params.id);
+  const project = Project.find(req.params.id);
+  if (!project) return res.status(404).json({ error: 'not found' });
+  const removeProject = db.transaction(() => {
+    db.prepare('DELETE FROM project_memberships WHERE projectId=?').run(project.id);
+    Project.destroy(project.id);
+  });
+  removeProject();
   res.json({ ok: true });
 });
 
@@ -63,8 +79,14 @@ router.post('/:id/members', (req, res) => {
 router.post('/:id/members/:membershipId/weight', (req, res) => {
   const { weight, effectiveFrom } = req.body;
   const m = ProjectMembership.find(req.params.membershipId);
-  if (!m) return res.status(404).json({ error: 'not found' });
+  if (!m || m.projectId !== Number(req.params.id)) return res.status(404).json({ error: 'not found' });
+  if (!Number.isFinite(Number(weight)) || Number(weight) <= 0) {
+    return res.status(400).json({ error: 'weight must be greater than 0' });
+  }
   const today = effectiveFrom || dayjs().format('YYYY-MM-DD');
+  if (!isIsoDate(today)) {
+    return res.status(400).json({ error: 'invalid effectiveFrom date' });
+  }
 
   const tx = db.transaction(() => {
     ProjectMembership.update(m.id, {
@@ -72,7 +94,7 @@ router.post('/:id/members/:membershipId/weight', (req, res) => {
     });
     return ProjectMembership.create({
       employeeId: m.employeeId, projectId: m.projectId,
-      weight, role: m.role, effectiveFrom: today, note: 'weight adjust',
+      weight: Number(weight), role: m.role, effectiveFrom: today, note: 'weight adjust',
     });
   });
   res.json(tx());
@@ -80,7 +102,7 @@ router.post('/:id/members/:membershipId/weight', (req, res) => {
 
 router.delete('/:id/members/:membershipId', (req, res) => {
   const m = ProjectMembership.find(req.params.membershipId);
-  if (!m) return res.status(404).json({ error: 'not found' });
+  if (!m || m.projectId !== Number(req.params.id)) return res.status(404).json({ error: 'not found' });
   ProjectMembership.update(m.id, { effectiveTo: dayjs().format('YYYY-MM-DD') });
   res.json({ ok: true });
 });

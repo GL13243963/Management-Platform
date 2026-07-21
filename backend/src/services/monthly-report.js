@@ -1,14 +1,5 @@
 /**
  * Monthly-report Excel parser.
- *
- * Handles the "matrix" attendance report where:
- *  - Rows 0–4  = title / meta / column headers (`08/一`, `09/二`, ...)
- *  - Row 5, 7, 9, ...  = employee 签到 row (with name in col 2, dept in col 3)
- *  - Row 6, 8, 10, ... = the same employee's 签退 row
- *
- * The `startDate` (YYYY-MM-DD) is required so we know the year+month that the day
- * numbers in the column headers belong to; when day numbers reset (e.g. 30 → 01)
- * the month rolls over automatically.
  */
 
 const XLSX = require('xlsx');
@@ -21,28 +12,28 @@ function inferDateRangeFromName(name = '') {
   if (!m) return null;
   return {
     startDate: `${m[1]}-${m[2]}-${m[3]}`,
-    endDate:   `${m[4]}-${m[5]}-${m[6]}`,
+    endDate: `${m[4]}-${m[5]}-${m[6]}`,
   };
 }
 
 function buildColumnDates(headerRow, startDate) {
-  // Column 10 is the first date column (aligned with startDate). Walk forward:
-  // whenever the header's day number is LESS than the previous one, roll to next month.
+  // Column 9 (column J) is the first date column
   const map = {};
   let cursor = dayjs(startDate);
-  const startDay = parseInt(String(headerRow[10]).split('/')[0], 10);
-  if (Number.isNaN(startDay) || startDay !== cursor.date()) {
-    // If header's first day doesn't match startDate.date(), still trust startDate.
-  }
-  map[10] = cursor.format('YYYY-MM-DD');
+  map[9] = cursor.format('YYYY-MM-DD');
   let prevDay = cursor.date();
-  for (let c = 11; c < headerRow.length; c++) {
+
+  for (let c = 10; c < headerRow.length; c++) {
     const cell = String(headerRow[c] || '').trim();
     if (!cell) break;
-    const dayNum = parseInt(cell.split('/')[0], 10);
+    const dayMatch = cell.match(/^(\d+)/);
+    if (!dayMatch) break;
+    const dayNum = parseInt(dayMatch[1], 10);
     if (Number.isNaN(dayNum)) break;
+
     if (dayNum < prevDay) cursor = cursor.add(1, 'month').date(dayNum);
     else cursor = cursor.date(dayNum);
+
     map[c] = cursor.format('YYYY-MM-DD');
     prevDay = dayNum;
   }
@@ -50,9 +41,7 @@ function buildColumnDates(headerRow, startDate) {
 }
 
 /**
- * Parse a monthly report workbook and return:
- *   { startDate, endDate, records: [{ name, department, date, clockIn, clockOut }] }
- * If a day has no punch data for someone, no record is emitted for that (name, date).
+ * Parse a monthly report workbook and return records.
  */
 function parseMonthlyReport(filePath, opts = {}) {
   const wb = XLSX.readFile(filePath);
@@ -62,35 +51,91 @@ function parseMonthlyReport(filePath, opts = {}) {
   // Infer date range from either explicit opts or the sheet name / file name.
   let range = opts.startDate && opts.endDate ? { startDate: opts.startDate, endDate: opts.endDate } : null;
   range = range || inferDateRangeFromName(wb.SheetNames[0]) || inferDateRangeFromName(filePath);
-  if (!range) throw new Error('Cannot infer date range — pass { startDate, endDate } explicitly.');
 
-  // Header row is at index 3 in this template (has "帐号 工号 姓名 ..." and 08/一 ...)
-  const headerIdx = rows.findIndex(r => r && r[0] === '帐号');
-  if (headerIdx < 0) throw new Error('Header row (帐号 姓名 部门 ...) not found.');
+  let headerIdx = rows.findIndex(r => r && String(r[0]) === '姓名');
+  if (headerIdx < 0) {
+    for (let i = 0; i < Math.min(20, rows.length); i++) {
+      if (rows[i] && String(rows[i][0]) === '帐号') {
+        headerIdx = i;
+        break;
+      }
+    }
+  }
+  if (headerIdx < 0) throw new Error('Header row (姓名 部门 ...) not found.');
+
+  // Try to infer start date from header: if first date col is '21/日' and last date col is '20/一'
+  // Then it's probably 6/21 to 7/20
+  if (!range) {
+    const headerRow = rows[headerIdx];
+    let firstDay = null, lastDay = null;
+    for (let c = 9; c < headerRow.length; c++) {
+      const cell = String(headerRow[c] || '').trim();
+      if (!cell) continue;
+      const dayMatch = cell.match(/^(\d+)/);
+      if (!dayMatch) continue;
+      const dayNum = parseInt(dayMatch[1], 10);
+      if (!firstDay) firstDay = dayNum;
+      lastDay = dayNum;
+    }
+
+    if (firstDay !== null && lastDay !== null) {
+      const now = dayjs();
+      let startYear = now.year();
+      let startMonth = now.month();
+
+      if (firstDay > lastDay) {
+        startMonth = now.month() - 1;
+        if (startMonth < 0) {
+          startMonth = 11;
+          startYear--;
+        }
+      }
+      const startDate = dayjs().year(startYear).month(startMonth).date(firstDay);
+      const endDate = firstDay > lastDay ? startDate.add(1, 'month').date(lastDay) : startDate.date(lastDay);
+      range = {
+        startDate: startDate.format('YYYY-MM-DD'),
+        endDate: endDate.format('YYYY-MM-DD'),
+      };
+    }
+  }
+  if (!range) throw new Error('Cannot infer date range.');
+
   const colDate = buildColumnDates(rows[headerIdx], range.startDate);
   const dateCols = Object.keys(colDate).map(Number);
 
   const records = [];
   const employees = new Set();
 
-  // Iterate employee blocks: each employee occupies 2 rows starting at headerIdx + 2 (skip sub-header row).
-  // In this template, first data row is headerIdx + 2 (the 签到 row of the first employee).
-  for (let i = headerIdx + 2; i < rows.length; i += 2) {
+  let firstDataRow = headerIdx + 1;
+  for (let i = headerIdx + 1; i < Math.min(headerIdx + 20, rows.length); i++) {
+    const firstCell = rows[i] && String(rows[i][0]).trim();
+    if (firstCell && firstCell !== '姓名' && firstCell !== '帐号') {
+      firstDataRow = i;
+      break;
+    }
+  }
+
+  for (let i = firstDataRow; i < rows.length; i += 2) {
     const rIn = rows[i];
     const rOut = rows[i + 1] || [];
-    const name = String(rIn[2] || '').trim();
+
+    const name = String(rIn[0] || '').trim();
     if (!name) continue;
-    const department = String(rIn[3] || '').trim();
-    const employeeNo = String(rIn[1] || '').trim() || null;
+    if (name.includes('合计') || name.includes('总计') || name.includes('小计')) continue;
+
+    const department = String(rIn[1] || '').trim();
     employees.add(name);
 
     for (const c of dateCols) {
       const clockIn = String(rIn[c] || '').trim() || null;
       const clockOut = String(rOut[c] || '').trim() || null;
-      if (!clockIn && !clockOut) continue; // no punch → skip
+
+      if (!clockIn && !clockOut) continue;
+
       records.push({
-        name, department, employeeNo,
+        name, department,
         date: colDate[c], clockIn, clockOut,
+        overrideType: null,
       });
     }
   }

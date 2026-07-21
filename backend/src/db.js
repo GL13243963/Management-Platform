@@ -101,4 +101,15 @@ db.exec(`
   );
 `);
 
+// Lightweight migrations for databases created by earlier versions.
+const employeeColumns = raw.prepare('PRAGMA table_info(employees)').all();
+if (!employeeColumns.some(column => column.name === 'team')) {
+  raw.exec('ALTER TABLE employees ADD COLUMN team TEXT');
+}
+// Earlier UI versions stored the team directly in `department`.
+raw.prepare(`
+  UPDATE employees SET team=department
+  WHERE team IS NULL AND department IN ('规划组', '建筑组')
+`).run();
+
 module.exports = db;

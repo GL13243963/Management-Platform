@@ -3,7 +3,7 @@
 面向中建创新中心的**本地化**人员与项目管理系统。支持考勤导入自动核算工时、项目主副权重时间序列分配、多维度分析看板。
 
 - **前端**：Vue 3 + Ant Design Vue 4 + Vite + ECharts
-- **后端**：Node.js + Express + Sequelize + SQLite
+- **后端**：Node.js + Express + Node.js 内置 SQLite
 - **主题色**：中建蓝 `#0074C4`
 - **部署形态**：本机服务 + 浏览器访问（数据100%本地）
 
@@ -11,7 +11,7 @@
 
 ## ⚡ 一键运行
 
-1. 确认已安装 **Node.js 18+**：<https://nodejs.org/>
+1. 确认已安装 **Node.js 22.5+**：<https://nodejs.org/>
 2. 双击项目根目录下的 **`start.bat`**
 3. 浏览器自动打开 <http://localhost:3001>
 
@@ -28,7 +28,7 @@
 ├── backend/
 │   ├── src/
 │   │   ├── index.js              入口 & 静态资源
-│   │   ├── db.js                 Sequelize + SQLite
+│   │   ├── db.js                 Node.js 内置 SQLite
 │   │   ├── models/               数据模型
 │   │   ├── services/
 │   │   │   ├── attendance.js     工时计算 & 迟到/早退判定
