@@ -23,18 +23,21 @@ function toMinutes(hhmm) {
 }
 
 function computeDaily({ clockIn, clockOut }) {
+  // Attendance exports may append an authoritative status marker to the time,
+  // for example "17:43 早退" when a person's scheduled end is later than 17:30.
+  const sourceLate = /迟到/.test(String(clockIn || ''));
+  const sourceEarlyLeave = /早退/.test(String(clockOut || ''));
   const inT = parseTime(clockIn);
   const outT = parseTime(clockOut);
 
-  // 只有上班和下班都没打卡才算缺勤
+  // Both punches marked as missing count as one missed-punch day.
   if (!inT && !outT) {
     return {
       clockIn: inT, clockOut: outT,
-      workHours: 0, isLate: false, isEarlyLeave: false, status: 'absent',
+      workHours: 0, isLate: false, isEarlyLeave: false, status: 'missed_punch',
     };
   }
 
-  // 如果只有一边没打卡，不算缺勤，但工时为0
   if (!inT || !outT) {
     return {
       clockIn: inT, clockOut: outT,
@@ -49,8 +52,8 @@ function computeDaily({ clockIn, clockOut }) {
 
   const workHours = Math.max(0, (outMin - inMin) / 60);
 
-  const isLate = inMin > startMin;
-  const isEarlyLeave = outMin < endMin;
+  const isLate = sourceLate || inMin > startMin;
+  const isEarlyLeave = sourceEarlyLeave || outMin < endMin;
 
   let status = 'normal';
   if (isLate && isEarlyLeave) status = 'late_and_early';

@@ -54,7 +54,7 @@
         <div class="group-title">规划组 - 出勤统计</div>
         <div ref="planningChart" class="group-chart-wrapper"></div>
         <div class="absent-list">
-          <div class="absent-list-title">缺勤人员</div>
+          <div class="absent-list-title">漏刷人员</div>
           <div class="absent-list-items">
             <template v-if="planningAbsent.length">
               <span v-for="name in planningAbsent" :key="name" class="absent-tag">{{ name }}</span>
@@ -67,7 +67,7 @@
         <div class="group-title">建筑组 - 出勤统计</div>
         <div ref="architectureChart" class="group-chart-wrapper"></div>
         <div class="absent-list">
-          <div class="absent-list-title">缺勤人员</div>
+          <div class="absent-list-title">漏刷人员</div>
           <div class="absent-list-items">
             <template v-if="architectureAbsent.length">
               <span v-for="name in architectureAbsent" :key="name" class="absent-tag">{{ name }}</span>
@@ -100,6 +100,12 @@
           <template v-if="column.key === 'earlyDays'">
             <span v-if="record.earlyDays > 0" class="highlight-count">
               {{ record.earlyDays }} 次
+            </span>
+            <span v-else>0</span>
+          </template>
+          <template v-if="column.key === 'missedPunchDays'">
+            <span v-if="record.missedPunchDays > 0" class="highlight-count">
+              {{ record.missedPunchDays }} 次
             </span>
             <span v-else>0</span>
           </template>
@@ -138,6 +144,7 @@ const empCols = [
   { title: '出勤天数', dataIndex: 'days', width: 110 },
   { title: '迟到次数', key: 'lateDays', dataIndex: 'lateDays', width: 120 },
   { title: '早退次数', key: 'earlyDays', dataIndex: 'earlyDays', width: 120 },
+  { title: '漏刷次数', key: 'missedPunchDays', dataIndex: 'missedPunchDays', width: 120 },
   { title: '个人全勤率', key: 'personalFullAttendanceRate', width: 140 },
 ];
 
@@ -165,7 +172,7 @@ const planningAbsent = computed(() => {
 
   for (const log of attendanceLogs.value) {
     if (planningEmployees.includes(log.employeeName)) {
-      if (log.status === 'absent') {
+      if (['missed_punch', 'absent'].includes(log.status)) {
         absentSet.add(log.employeeName);
       }
     }
@@ -180,7 +187,7 @@ const architectureAbsent = computed(() => {
 
   for (const log of attendanceLogs.value) {
     if (architectureEmployees.includes(log.employeeName)) {
-      if (log.status === 'absent') {
+      if (['missed_punch', 'absent'].includes(log.status)) {
         absentSet.add(log.employeeName);
       }
     }
@@ -203,7 +210,7 @@ function getGroupAttendanceStats(departmentKeyword) {
 
   const stats = {
     normal: 0, late: 0, early: 0, lateAndEarly: 0,
-    leave: 0, businessTrip: 0, compLeave: 0, absent: 0,
+    leave: 0, businessTrip: 0, compLeave: 0, missedPunch: 0,
   };
 
   for (const log of groupLogs) {
@@ -214,7 +221,7 @@ function getGroupAttendanceStats(departmentKeyword) {
     else if (log.status === 'late') stats.late++;
     else if (log.status === 'early') stats.early++;
     else if (log.status === 'late_and_early') stats.lateAndEarly++;
-    else if (log.status === 'absent') stats.absent++;
+    else if (['missed_punch', 'absent'].includes(log.status)) stats.missedPunch++;
     else stats.normal++;
   }
 
@@ -272,7 +279,7 @@ function getGroupChartOption(stats) {
     { name: '请假', value: stats.leave, itemStyle: { color: '#3B82F6' } },
     { name: '出差', value: stats.businessTrip, itemStyle: { color: '#6366F1' } },
     { name: '调休', value: stats.compLeave, itemStyle: { color: '#8B5CF6' } },
-    { name: '缺勤', value: stats.absent, itemStyle: { color: '#991B1B' } },
+    { name: '漏刷', value: stats.missedPunch, itemStyle: { color: '#991B1B' } },
   ].filter(d => d.value > 0);
 
   const hasData = data.length > 0;

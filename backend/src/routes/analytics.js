@@ -13,13 +13,14 @@ router.get('/summary', (req, res) => {
   const totalDays = logs.length;
   const lateDays = logs.filter(l => l.isLate && !l.overrideType).length;
   const earlyDays = logs.filter(l => l.isEarlyLeave && !l.overrideType).length;
+  const missedPunchDays = logs.filter(l => ['missed_punch', 'absent'].includes(l.status) && !l.overrideType).length;
   const overrideDays = logs.filter(l => !!l.overrideType).length;
   const attendedDays = logs.filter(l => l.workHours > 0 || l.overrideType).length;
   const attendanceRate = totalDays ? Math.round((attendedDays / totalDays) * 10000) / 100 : 0;
 
   res.json({
     totalHours: Math.round(totalHours * 100) / 100,
-    totalDays, lateDays, earlyDays, overrideDays,
+    totalDays, lateDays, earlyDays, missedPunchDays, overrideDays,
     attendanceRate,
     employeeCount: new Set(logs.map(l => l.employeeId)).size,
   });
@@ -59,19 +60,24 @@ router.get('/by-employee', (req, res) => {
     const cur = map.get(l.employeeId) || {
       employeeId: l.employeeId, name: l.employeeName,
       totalHours: 0, days: 0, lateDays: 0, earlyDays: 0,
+      missedPunchDays: 0, abnormalDays: 0,
       firstAttendanceDate: firstDateMap.get(l.employeeId) || null,
     };
     cur.totalHours += (l.workHours || 0);
     cur.days += 1;
     if (l.isLate && !l.overrideType) cur.lateDays += 1;
     if (l.isEarlyLeave && !l.overrideType) cur.earlyDays += 1;
+    if (!l.overrideType && ['missed_punch', 'absent'].includes(l.status)) cur.missedPunchDays += 1;
+    if (!l.overrideType && (l.isLate || l.isEarlyLeave || ['missed_punch', 'absent'].includes(l.status))) {
+      cur.abnormalDays += 1;
+    }
     map.set(l.employeeId, cur);
   }
 
   // 计算个人全勤率：(实际出勤 - 迟到 - 早退) / 实际出勤
   const result = Array.from(map.values()).map(emp => {
     const workingDays = emp.days; // 应出勤天数 = 实际出勤天数
-    const normalDays = emp.days - emp.lateDays - emp.earlyDays;
+    const normalDays = emp.days - emp.abnormalDays;
     const personalFullAttendanceRate = workingDays > 0
       ? Math.round((normalDays / workingDays) * 100)
       : 0;

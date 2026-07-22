@@ -39,7 +39,7 @@
           <a-select-option value="late">迟到</a-select-option>
           <a-select-option value="early">早退</a-select-option>
           <a-select-option value="late_and_early">迟到+早退</a-select-option>
-          <a-select-option value="absent">缺勤</a-select-option>
+          <a-select-option value="missed_punch">漏刷</a-select-option>
           <a-select-option value="leave">请假</a-select-option>
           <a-select-option value="business_trip">出差</a-select-option>
           <a-select-option value="comp_leave">调休</a-select-option>
@@ -129,7 +129,8 @@ const STATUS_MAP = {
   late: ['迟到', 'warning'],
   early: ['早退', 'warning'],
   late_and_early: ['迟到+早退', 'error'],
-  absent: ['缺勤', 'error'],
+  missed_punch: ['漏刷', 'error'],
+  absent: ['漏刷', 'error'],
   leave: ['请假', 'blue'],
   business_trip: ['出差', 'cyan'],
   comp_leave: ['调休', 'purple'],

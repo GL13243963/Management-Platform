@@ -60,6 +60,7 @@ const empCols = [
   { title: '出勤天数', dataIndex: 'days', width: 120 },
   { title: '迟到', dataIndex: 'lateDays', width: 80 },
   { title: '早退', dataIndex: 'earlyDays', width: 80 },
+  { title: '漏刷', dataIndex: 'missedPunchDays', width: 80 },
 ];
 
 function params() {
