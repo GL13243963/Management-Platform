@@ -27,21 +27,19 @@ function computeDaily({ clockIn, clockOut }) {
   // for example "17:43 早退" when a person's scheduled end is later than 17:30.
   const sourceLate = /迟到/.test(String(clockIn || ''));
   const sourceEarlyLeave = /早退/.test(String(clockOut || ''));
+  const sourceMissedPunch = /漏刷|漏卡|缺卡|未打卡/.test(`${clockIn || ''} ${clockOut || ''}`);
   const inT = parseTime(clockIn);
   const outT = parseTime(clockOut);
 
   // Both punches marked as missing count as one missed-punch day.
-  if (!inT && !outT) {
+  if (sourceMissedPunch || !inT || !outT) {
     return {
       clockIn: inT, clockOut: outT,
-      workHours: 0, isLate: false, isEarlyLeave: false, status: 'missed_punch',
-    };
-  }
-
-  if (!inT || !outT) {
-    return {
-      clockIn: inT, clockOut: outT,
-      workHours: 0, isLate: false, isEarlyLeave: false, status: 'normal',
+      workHours: 0,
+      isLate: sourceLate,
+      isEarlyLeave: sourceEarlyLeave,
+      isMissedPunch: true,
+      status: 'missed_punch',
     };
   }
 
@@ -64,7 +62,7 @@ function computeDaily({ clockIn, clockOut }) {
     clockIn: inT,
     clockOut: outT,
     workHours: Math.round(workHours * 100) / 100,
-    isLate, isEarlyLeave, status,
+    isLate, isEarlyLeave, isMissedPunch: false, status,
   };
 }
 

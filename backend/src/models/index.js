@@ -127,31 +127,51 @@ const ProjectMembership = {
 };
 
 /** Attendance */
-const ATT_COLS = ['clockIn', 'clockOut', 'workHours', 'status', 'isLate', 'isEarlyLeave', 'overrideType', 'overrideNote'];
+const ATT_COLS = ['clockIn', 'clockOut', 'workHours', 'status', 'isLate', 'isEarlyLeave', 'isMissedPunch', 'rawClockIn', 'rawClockOut', 'sourceRow', 'sourceColumn', 'overrideType', 'overrideNote'];
 const AttendanceLog = {
-  find(id) { return boolify(db.prepare('SELECT * FROM attendance_logs WHERE id=?').get(id), ['isLate', 'isEarlyLeave']); },
+  find(id) { return boolify(db.prepare('SELECT * FROM attendance_logs WHERE id=?').get(id), ['isLate', 'isEarlyLeave', 'isMissedPunch']); },
   findByEmpDate(employeeId, date) {
     return boolify(db.prepare('SELECT * FROM attendance_logs WHERE employeeId=? AND date=?').get(employeeId, date), ['isLate', 'isEarlyLeave']);
   },
-  upsert({ employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave }) {
+  upsert({ employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave, isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn }) {
     const existing = this.findByEmpDate(employeeId, date);
     if (existing) {
       db.prepare(`
-        UPDATE attendance_logs SET clockIn=?, clockOut=?, workHours=?, status=?, isLate=?, isEarlyLeave=?,
+        UPDATE attendance_logs SET clockIn=?, clockOut=?, workHours=?, status=?, isLate=?, isEarlyLeave=?, isMissedPunch=?,
+          rawClockIn=?, rawClockOut=?, sourceRow=?, sourceColumn=?,
           updatedAt=datetime('now','localtime') WHERE id=?
-      `).run(clockIn, clockOut, workHours, status, isLate?1:0, isEarlyLeave?1:0, existing.id);
+      `).run(clockIn, clockOut, workHours, existing.overrideType || status, isLate?1:0, isEarlyLeave?1:0, isMissedPunch?1:0,
+        rawClockIn, rawClockOut, sourceRow, sourceColumn, existing.id);
       return { row: this.find(existing.id), created: false };
     }
     const info = db.prepare(`
-      INSERT INTO attendance_logs (employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate?1:0, isEarlyLeave?1:0);
+      INSERT INTO attendance_logs (employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave,
+        isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate?1:0, isEarlyLeave?1:0,
+      isMissedPunch?1:0, rawClockIn, rawClockOut, sourceRow, sourceColumn);
     return { row: this.find(Number(info.lastInsertRowid)), created: true };
   },
   update(id, patch) {
     const u = buildUpdate('attendance_logs', patch, ATT_COLS);
     if (u) db.prepare(u.sql).run(...u.values, id);
     return this.find(id);
+  },
+  deleteMissingInRange(employeeIds, startDate, endDate, sourceKeys) {
+    if (!employeeIds.length) return 0;
+    const placeholders = employeeIds.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT id, employeeId, date FROM attendance_logs
+      WHERE employeeId IN (${placeholders}) AND date >= ? AND date <= ?
+    `).all(...employeeIds, startDate, endDate);
+    let removed = 0;
+    for (const row of rows) {
+      if (!sourceKeys.has(`${row.employeeId}:${row.date}`)) {
+        db.prepare('DELETE FROM attendance_logs WHERE id=?').run(row.id);
+        removed += 1;
+      }
+    }
+    return removed;
   },
   query({ startDate, endDate, employeeId, status } = {}) {
     const where = [];
@@ -163,7 +183,7 @@ const AttendanceLog = {
     const sql = `SELECT * FROM attendance_logs
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY date DESC, employeeName ASC LIMIT 2000`;
-    return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave']));
+    return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave', 'isMissedPunch']));
   },
   /** 查询所有记录（无LIMIT，用于统计） */
   queryAll({ startDate, endDate, employeeId, status } = {}) {
@@ -176,7 +196,7 @@ const AttendanceLog = {
     const sql = `SELECT * FROM attendance_logs
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY date DESC, employeeName ASC`;
-    return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave']));
+    return db.prepare(sql).all(...params).map(r => boolify(r, ['isLate', 'isEarlyLeave', 'isMissedPunch']));
   },
 };
 

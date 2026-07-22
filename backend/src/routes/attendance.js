@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
 const dayjs = require('dayjs');
-const { Employee, AttendanceLog, Adjustment } = require('../models');
+const { db, Employee, AttendanceLog, Adjustment } = require('../models');
 const { computeDaily } = require('../services/attendance');
 const { parseMonthlyReport } = require('../services/monthly-report');
 
@@ -73,24 +73,61 @@ function isMonthlyReportFormat(filePath) {
 async function importMonthlyReport(filePath) {
   const { startDate, endDate, records } = parseMonthlyReport(filePath);
   let created = 0, updated = 0;
+  let removedStale = 0;
+  const verification = new Map();
   const empByName = new Map();
+
   for (const r of records) {
-    let emp = empByName.get(r.name);
-    if (!emp) {
-      emp = Employee.findByName(r.name);
-      if (!emp) emp = Employee.create({ name: r.name, department: r.department, employeeNo: r.employeeNo });
-      empByName.set(r.name, emp);
-    }
-    const daily = computeDaily({ clockIn: r.clockIn, clockOut: r.clockOut });
-    const { created: isNew } = AttendanceLog.upsert({
-      employeeId: emp.id, employeeName: emp.name, date: r.date,
-      clockIn: daily.clockIn, clockOut: daily.clockOut,
-      workHours: daily.workHours, status: daily.status,
-      isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave,
-    });
-    if (isNew) created++; else updated++;
+    if (empByName.has(r.name)) continue;
+    let emp = Employee.findByName(r.name);
+    if (!emp) emp = Employee.create({ name: r.name, department: r.department, employeeNo: r.employeeNo });
+    empByName.set(r.name, emp);
   }
-  return { format: 'monthly-report', startDate, endDate, created, updated, skipped: 0 };
+
+  const importRecords = () => {
+    const sourceKeys = new Set(records.map(r => `${empByName.get(r.name).id}:${r.date}`));
+    removedStale = AttendanceLog.deleteMissingInRange(
+      Array.from(empByName.values(), emp => emp.id), startDate, endDate, sourceKeys,
+    );
+
+    for (const r of records) {
+      const emp = empByName.get(r.name);
+      const daily = computeDaily({ clockIn: r.clockIn, clockOut: r.clockOut });
+      const { row, created: isNew } = AttendanceLog.upsert({
+        employeeId: emp.id, employeeName: emp.name, date: r.date,
+        clockIn: daily.clockIn, clockOut: daily.clockOut,
+        workHours: daily.workHours, status: daily.status,
+        isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave, isMissedPunch: daily.isMissedPunch,
+        rawClockIn: r.rawClockIn, rawClockOut: r.rawClockOut,
+        sourceRow: r.sourceRow, sourceColumn: r.sourceColumn,
+      });
+      const check = verification.get(r.name) || {
+        employeeName: r.name,
+        source: { late: 0, early: 0, missedPunch: 0 },
+        imported: { late: 0, early: 0, missedPunch: 0 },
+      };
+      check.source.late += daily.isLate ? 1 : 0;
+      check.source.early += daily.isEarlyLeave ? 1 : 0;
+      check.source.missedPunch += daily.isMissedPunch ? 1 : 0;
+      check.imported.late += row.isLate ? 1 : 0;
+      check.imported.early += row.isEarlyLeave ? 1 : 0;
+      check.imported.missedPunch += row.isMissedPunch ? 1 : 0;
+      verification.set(r.name, check);
+      if (isNew) created++; else updated++;
+    }
+  };
+  db.transaction(importRecords)();
+  const reconciliation = Array.from(verification.values()).map(item => ({
+    ...item,
+    matched: item.source.late === item.imported.late
+      && item.source.early === item.imported.early
+      && item.source.missedPunch === item.imported.missedPunch,
+  }));
+  return {
+    format: 'monthly-report', startDate, endDate, created, updated, removedStale, skipped: 0,
+    verified: reconciliation.every(item => item.matched),
+    reconciliation,
+  };
 }
 
 function importRowFormat(filePath) {
@@ -111,7 +148,8 @@ function importRowFormat(filePath) {
       employeeId: emp.id, employeeName: emp.name, date,
       clockIn: daily.clockIn, clockOut: daily.clockOut,
       workHours: daily.workHours, status: daily.status,
-      isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave,
+      isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave, isMissedPunch: daily.isMissedPunch,
+      rawClockIn: clockIn, rawClockOut: clockOut,
     });
     if (isNew) created++; else updated++;
   }
@@ -163,10 +201,15 @@ router.patch('/:id', (req, res) => {
     if (overrideType) {
       patch.overrideType = overrideType;
       patch.overrideNote = overrideNote || null;
-      patch.isLate = false; patch.isEarlyLeave = false; patch.status = overrideType;
+      patch.status = overrideType;
       if (!patch.workHours) patch.workHours = 8;
     } else {
       patch.overrideType = null; patch.overrideNote = null;
+      const daily = computeDaily({
+        clockIn: clockIn ?? log.rawClockIn ?? log.clockIn,
+        clockOut: clockOut ?? log.rawClockOut ?? log.clockOut,
+      });
+      Object.assign(patch, daily);
     }
   }
   const saved = AttendanceLog.update(log.id, patch);

@@ -16,20 +16,27 @@ function inferDateRangeFromName(name = '') {
   };
 }
 
+function findDateColumns(headerRow) {
+  return headerRow
+    .map((value, index) => (/^\d{1,2}\/[一二三四五六日]$/.test(String(value || '').trim()) ? index : -1))
+    .filter(index => index >= 0);
+}
+
 function buildColumnDates(headerRow, startDate) {
-  // Column 9 (column J) is the first date column
   const map = {};
+  const dateColumns = findDateColumns(headerRow);
+  if (!dateColumns.length) return map;
+
   let cursor = dayjs(startDate);
-  map[9] = cursor.format('YYYY-MM-DD');
+  map[dateColumns[0]] = cursor.format('YYYY-MM-DD');
   let prevDay = cursor.date();
 
-  for (let c = 10; c < headerRow.length; c++) {
+  for (const c of dateColumns.slice(1)) {
     const cell = String(headerRow[c] || '').trim();
-    if (!cell) break;
     const dayMatch = cell.match(/^(\d+)/);
-    if (!dayMatch) break;
+    if (!dayMatch) continue;
     const dayNum = parseInt(dayMatch[1], 10);
-    if (Number.isNaN(dayNum)) break;
+    if (Number.isNaN(dayNum)) continue;
 
     if (dayNum < prevDay) cursor = cursor.add(1, 'month').date(dayNum);
     else cursor = cursor.date(dayNum);
@@ -52,15 +59,7 @@ function parseMonthlyReport(filePath, opts = {}) {
   let range = opts.startDate && opts.endDate ? { startDate: opts.startDate, endDate: opts.endDate } : null;
   range = range || inferDateRangeFromName(wb.SheetNames[0]) || inferDateRangeFromName(filePath);
 
-  let headerIdx = rows.findIndex(r => r && String(r[0]) === '姓名');
-  if (headerIdx < 0) {
-    for (let i = 0; i < Math.min(20, rows.length); i++) {
-      if (rows[i] && String(rows[i][0]) === '帐号') {
-        headerIdx = i;
-        break;
-      }
-    }
-  }
+  let headerIdx = rows.findIndex(r => r && r.some(cell => ['姓名', '帐号'].includes(String(cell).trim())) && findDateColumns(r).length >= 5);
   if (headerIdx < 0) throw new Error('Header row (姓名 部门 ...) not found.');
 
   // Try to infer start date from header: if first date col is '21/日' and last date col is '20/一'
@@ -68,7 +67,7 @@ function parseMonthlyReport(filePath, opts = {}) {
   if (!range) {
     const headerRow = rows[headerIdx];
     let firstDay = null, lastDay = null;
-    for (let c = 9; c < headerRow.length; c++) {
+    for (const c of findDateColumns(headerRow)) {
       const cell = String(headerRow[c] || '').trim();
       if (!cell) continue;
       const dayMatch = cell.match(/^(\d+)/);
@@ -102,14 +101,19 @@ function parseMonthlyReport(filePath, opts = {}) {
 
   const colDate = buildColumnDates(rows[headerIdx], range.startDate);
   const dateCols = Object.keys(colDate).map(Number);
+  const headerRow = rows[headerIdx];
+  const nameCol = headerRow.findIndex(cell => String(cell).trim() === '姓名');
+  const departmentCol = headerRow.findIndex(cell => String(cell).trim() === '部门');
+  const employeeNoCol = headerRow.findIndex(cell => ['工号', '帐号'].includes(String(cell).trim()));
+  if (nameCol < 0) throw new Error('Name column not found.');
 
   const records = [];
   const employees = new Set();
 
   let firstDataRow = headerIdx + 1;
   for (let i = headerIdx + 1; i < Math.min(headerIdx + 20, rows.length); i++) {
-    const firstCell = rows[i] && String(rows[i][0]).trim();
-    if (firstCell && firstCell !== '姓名' && firstCell !== '帐号') {
+    const employeeName = rows[i] && String(rows[i][nameCol] || '').trim();
+    if (employeeName && employeeName !== '姓名') {
       firstDataRow = i;
       break;
     }
@@ -119,22 +123,25 @@ function parseMonthlyReport(filePath, opts = {}) {
     const rIn = rows[i];
     const rOut = rows[i + 1] || [];
 
-    const name = String(rIn[0] || '').trim();
+    const name = String(rIn[nameCol] || '').trim();
     if (!name) continue;
     if (name.includes('合计') || name.includes('总计') || name.includes('小计')) continue;
 
-    const department = String(rIn[1] || '').trim();
+    const department = departmentCol >= 0 ? String(rIn[departmentCol] || '').trim() : '';
+    const employeeNo = employeeNoCol >= 0 ? String(rIn[employeeNoCol] || '').trim() : '';
     employees.add(name);
 
     for (const c of dateCols) {
-      const clockIn = String(rIn[c] || '').trim() || null;
-      const clockOut = String(rOut[c] || '').trim() || null;
+      const rawClockIn = String(rIn[c] || '').trim() || null;
+      const rawClockOut = String(rOut[c] || '').trim() || null;
 
-      if (!clockIn && !clockOut) continue;
+      if (!rawClockIn && !rawClockOut) continue;
 
       records.push({
-        name, department,
-        date: colDate[c], clockIn, clockOut,
+        name, department, employeeNo,
+        date: colDate[c], clockIn: rawClockIn, clockOut: rawClockOut,
+        rawClockIn, rawClockOut,
+        sourceRow: i + 1, sourceColumn: c + 1,
         overrideType: null,
       });
     }
@@ -143,4 +150,4 @@ function parseMonthlyReport(filePath, opts = {}) {
   return { ...range, employees: Array.from(employees), records };
 }
 
-module.exports = { parseMonthlyReport, buildColumnDates, inferDateRangeFromName };
+module.exports = { parseMonthlyReport, buildColumnDates, findDateColumns, inferDateRangeFromName };

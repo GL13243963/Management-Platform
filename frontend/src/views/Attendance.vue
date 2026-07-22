@@ -24,10 +24,29 @@
       <a-alert
         v-if="lastImport"
         style="margin-top: 16px"
-        type="success"
+        :type="lastImport.verified === false ? 'error' : 'success'"
         show-icon
-        :message="`导入完成：新增 ${lastImport.created} 条 · 更新 ${lastImport.updated} 条 · 跳过 ${lastImport.skipped} 条`"
+        :message="lastImport.verified === false
+          ? '导入完成，但逐人异常数量核查未通过'
+          : `导入并核查完成：新增 ${lastImport.created} 条 · 更新 ${lastImport.updated} 条 · 清理旧错位 ${lastImport.removedStale || 0} 条 · 跳过 ${lastImport.skipped} 条`"
       />
+      <a-table
+        v-if="lastImport?.reconciliation?.length"
+        style="margin-top: 16px"
+        :data-source="lastImport.reconciliation"
+        :columns="verificationCols"
+        row-key="employeeName"
+        :pagination="false"
+        size="small"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'matched'">
+            <a-tag :color="record.matched ? 'success' : 'error'">
+              {{ record.matched ? '一致' : '有差异' }}
+            </a-tag>
+          </template>
+        </template>
+      </a-table>
     </div>
 
     <div class="card">
@@ -122,6 +141,14 @@ const cols = [
   { title: '状态', dataIndex: 'status', width: 120 },
   { title: '备注', dataIndex: 'overrideNote' },
   { title: '操作', dataIndex: 'actions', width: 120, fixed: 'right' },
+];
+
+const verificationCols = [
+  { title: '员工', dataIndex: 'employeeName' },
+  { title: '漏刷（原始/入库）', customRender: ({ record }) => `${record.source.missedPunch} / ${record.imported.missedPunch}` },
+  { title: '迟到（原始/入库）', customRender: ({ record }) => `${record.source.late} / ${record.imported.late}` },
+  { title: '早退（原始/入库）', customRender: ({ record }) => `${record.source.early} / ${record.imported.early}` },
+  { title: '核查结果', dataIndex: 'matched', width: 100 },
 ];
 
 const STATUS_MAP = {

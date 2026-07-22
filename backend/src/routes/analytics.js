@@ -13,7 +13,7 @@ router.get('/summary', (req, res) => {
   const totalDays = logs.length;
   const lateDays = logs.filter(l => l.isLate && !l.overrideType).length;
   const earlyDays = logs.filter(l => l.isEarlyLeave && !l.overrideType).length;
-  const missedPunchDays = logs.filter(l => ['missed_punch', 'absent'].includes(l.status) && !l.overrideType).length;
+  const missedPunchDays = logs.filter(l => l.isMissedPunch && !l.overrideType).length;
   const overrideDays = logs.filter(l => !!l.overrideType).length;
   const attendedDays = logs.filter(l => l.workHours > 0 || l.overrideType).length;
   const attendanceRate = totalDays ? Math.round((attendedDays / totalDays) * 10000) / 100 : 0;
@@ -67,8 +67,8 @@ router.get('/by-employee', (req, res) => {
     cur.days += 1;
     if (l.isLate && !l.overrideType) cur.lateDays += 1;
     if (l.isEarlyLeave && !l.overrideType) cur.earlyDays += 1;
-    if (!l.overrideType && ['missed_punch', 'absent'].includes(l.status)) cur.missedPunchDays += 1;
-    if (!l.overrideType && (l.isLate || l.isEarlyLeave || ['missed_punch', 'absent'].includes(l.status))) {
+    if (l.isMissedPunch && !l.overrideType) cur.missedPunchDays += 1;
+    if (!l.overrideType && (l.isLate || l.isEarlyLeave || l.isMissedPunch)) {
       cur.abnormalDays += 1;
     }
     map.set(l.employeeId, cur);

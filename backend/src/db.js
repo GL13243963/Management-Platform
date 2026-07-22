@@ -79,6 +79,11 @@ db.exec(`
     status TEXT DEFAULT 'normal',
     isLate INTEGER DEFAULT 0,
     isEarlyLeave INTEGER DEFAULT 0,
+    isMissedPunch INTEGER DEFAULT 0,
+    rawClockIn TEXT,
+    rawClockOut TEXT,
+    sourceRow INTEGER,
+    sourceColumn INTEGER,
     overrideType TEXT,
     overrideNote TEXT,
     source TEXT DEFAULT 'import',
@@ -110,6 +115,23 @@ if (!employeeColumns.some(column => column.name === 'team')) {
 raw.prepare(`
   UPDATE employees SET team=department
   WHERE team IS NULL AND department IN ('规划组', '建筑组')
+`).run();
+
+const attendanceColumns = raw.prepare('PRAGMA table_info(attendance_logs)').all();
+for (const [name, definition] of [
+  ['isMissedPunch', 'INTEGER DEFAULT 0'],
+  ['rawClockIn', 'TEXT'],
+  ['rawClockOut', 'TEXT'],
+  ['sourceRow', 'INTEGER'],
+  ['sourceColumn', 'INTEGER'],
+]) {
+  if (!attendanceColumns.some(column => column.name === name)) {
+    raw.exec(`ALTER TABLE attendance_logs ADD COLUMN ${name} ${definition}`);
+  }
+}
+raw.prepare(`
+  UPDATE attendance_logs SET isMissedPunch=1
+  WHERE status IN ('missed_punch', 'absent') AND isMissedPunch=0
 `).run();
 
 module.exports = db;
