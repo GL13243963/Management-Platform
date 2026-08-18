@@ -17,6 +17,7 @@
           </div>
           <div class="hdr-right">
             <a-space :size="16">
+              <a-button class="export-btn" @click="exportModal.open = true">导出领导看板</a-button>
               <div class="date-widget">
                 <div class="date-day">{{ dayOfWeek }}</div>
                 <div class="date-full">{{ today }}</div>
@@ -34,29 +35,17 @@
               mode="inline"
               @click="({key}) => $router.push({name: key})"
             >
-              <a-menu-item key="Dashboard">
-                <template #icon><dashboard-outlined /></template>
-                <span>数据概览</span>
+              <a-menu-item key="DataOps">
+                <template #icon><database-outlined /></template>
+                <span>数据及审批</span>
               </a-menu-item>
-              <a-menu-item key="Attendance">
+              <a-menu-item key="AttendanceBoard">
                 <template #icon><clock-circle-outlined /></template>
-                <span>考勤管理</span>
+                <span>考勤看板</span>
               </a-menu-item>
-              <a-menu-item key="Projects">
+              <a-menu-item key="ProjectBoard">
                 <template #icon><project-outlined /></template>
-                <span>项目管理</span>
-              </a-menu-item>
-              <a-menu-item key="Allocation">
-                <template #icon><partition-outlined /></template>
-                <span>项目分配</span>
-              </a-menu-item>
-              <a-menu-item key="Employees">
-                <template #icon><team-outlined /></template>
-                <span>人员管理</span>
-              </a-menu-item>
-              <a-menu-item key="Analytics">
-                <template #icon><bar-chart-outlined /></template>
-                <span>统计分析</span>
+                <span>项目看板</span>
               </a-menu-item>
             </a-menu>
           </div>
@@ -69,40 +58,52 @@
           </router-view>
         </a-layout-content>
       </a-layout>
+      <a-modal v-model:open="exportModal.open" title="导出领导看板" ok-text="生成单一 HTML" @ok="exportReport">
+        <a-form layout="vertical"><a-form-item label="汇报标题"><a-input v-model:value="exportModal.title" /></a-form-item><a-form-item label="数据日期范围"><a-range-picker v-model:value="exportModal.range" :allow-clear="false" style="width:100%" /></a-form-item><a-alert type="info" show-icon message="将生成完全离线、只读的综合看板 HTML，可直接发送给领导。" /></a-form>
+      </a-modal>
     </a-layout>
   </a-config-provider>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import {
-  DashboardOutlined, ClockCircleOutlined, ProjectOutlined,
-  PartitionOutlined, TeamOutlined, BarChartOutlined,
+  DatabaseOutlined, ClockCircleOutlined, ProjectOutlined,
 } from '@ant-design/icons-vue';
 
 dayjs.locale('zh-cn');
 
 const today = computed(() => dayjs().format('YYYY年MM月DD日'));
 const dayOfWeek = computed(() => dayjs().format('dddd'));
+const exportModal = reactive({ open: false, title: '创新中心运营看板', range: [dayjs().subtract(30, 'day'), dayjs()] });
+function exportReport() {
+  const params = new URLSearchParams({ title: exportModal.title, startDate: exportModal.range[0].format('YYYY-MM-DD'), endDate: exportModal.range[1].format('YYYY-MM-DD') });
+  window.location.href = `/api/analytics/leadership-report?${params}`;
+  exportModal.open = false;
+}
 
 const theme = {
   token: {
-    colorPrimary: '#0074C4',
-    colorInfo: '#0074C4',
-    colorSuccess: '#10B981',
-    colorWarning: '#F59E0B',
-    colorError: '#EF4444',
-    borderRadius: 8,
+    colorPrimary: '#7C6CF2',
+    colorInfo: '#7C6CF2',
+    colorSuccess: '#55CDB1',
+    colorWarning: '#F2C75C',
+    colorError: '#F3789B',
+    colorText: '#302D47',
+    colorTextSecondary: '#77738B',
+    colorBorder: '#EBE9F2',
+    colorBgLayout: '#F8F8FC',
+    borderRadius: 10,
     fontFamily: '-apple-system, "PingFang SC", "Microsoft YaHei", Segoe UI, Roboto, sans-serif',
   },
   components: {
     Menu: {
-      itemSelectedBg: '#E6F1FA',
-      itemSelectedColor: '#0074C4',
-      itemHoverBg: '#F5F7FA',
+      itemSelectedBg: '#EEEAFE',
+      itemSelectedColor: '#6656DF',
+      itemHoverBg: '#F8F6FF',
     },
   },
 };
@@ -110,9 +111,9 @@ const theme = {
 
 <style scoped>
 .hdr {
-  background: linear-gradient(135deg, #0074C4 0%, #0066AA 50%, #005A9E 100%);
+  background: linear-gradient(120deg, #8171F4 0%, #7563EC 55%, #A597F7 100%);
   height: auto;
-  box-shadow: 0 4px 16px rgba(0, 90, 158, 0.2);
+  box-shadow: 0 5px 20px rgba(103, 86, 223, 0.20);
   position: relative;
   z-index: 10;
 }
@@ -167,6 +168,7 @@ const theme = {
   display: flex;
   align-items: center;
 }
+.export-btn{color:#6656DF;border:0;background:#fff;box-shadow:0 4px 14px rgba(54,40,135,.16);font-weight:600}
 
 .date-widget {
   text-align: right;
@@ -193,8 +195,8 @@ const theme = {
 }
 
 .sider {
-  background: #fff !important;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+  background: #FFFEFF !important;
+  box-shadow: 3px 0 18px rgba(74, 64, 126, 0.055);
   padding-top: 12px;
   height: calc(100vh - 72px);
   overflow-y: auto;

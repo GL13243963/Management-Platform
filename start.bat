@@ -42,18 +42,16 @@ if not exist "frontend\node_modules" (
   popd
 )
 
-if not exist "frontend\dist\index.html" (
-  echo [3/4] Building frontend ...
-  pushd frontend
-  call npm run build
-  if errorlevel 1 (
-    echo Frontend build failed.
-    popd
-    pause
-    exit /b 1
-  )
+echo [3/4] Building frontend ...
+pushd frontend
+call npm run build
+if errorlevel 1 (
+  echo Frontend build failed.
   popd
+  pause
+  exit /b 1
 )
+popd
 
 echo [4/4] Starting server on http://localhost:3001 ...
 start "" http://localhost:3001

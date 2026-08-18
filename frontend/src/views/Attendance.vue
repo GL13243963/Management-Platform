@@ -3,6 +3,8 @@
     <h1 class="page-title">考勤管理</h1>
     <p class="page-subtitle">导入打卡数据 · 自动核算工时 · 异常手动标记</p>
 
+    <DataDateBanner :range="range" />
+
     <div class="card">
       <div class="section-title">数据导入</div>
       <a-space :size="14" wrap>
@@ -71,6 +73,43 @@
     </div>
 
     <div class="card">
+      <div class="section-title">员工汇总（按日期范围）</div>
+      <a-table
+        :data-source="summaryRows"
+        :columns="summaryCols"
+        :pagination="{ pageSize: 10 }"
+        row-key="employeeId"
+        size="middle"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'totalHours'">
+            <b>{{ fmtHours(record.totalHours) }}</b>
+          </template>
+          <template v-if="column.key === 'lateDays'">
+            <span :style="{ color: record.lateDays > 0 ? '#D9A92E' : '', fontWeight: record.lateDays > 0 ? 600 : 400 }">
+              {{ record.lateDays }}
+            </span>
+          </template>
+          <template v-if="column.key === 'earlyDays'">
+            <span :style="{ color: record.earlyDays > 0 ? '#D9A92E' : '', fontWeight: record.earlyDays > 0 ? 600 : 400 }">
+              {{ record.earlyDays }}
+            </span>
+          </template>
+          <template v-if="column.key === 'missedPunchDays'">
+            <span :style="{ color: record.missedPunchDays > 0 ? '#D94F78' : '', fontWeight: record.missedPunchDays > 0 ? 600 : 400 }">
+              {{ record.missedPunchDays }}
+            </span>
+          </template>
+          <template v-if="column.key === 'rate'">
+            <span :style="{ color: record.personalFullAttendanceRate >= 90 ? '#10B981' : record.personalFullAttendanceRate >= 70 ? '#F59E0B' : '#EF4444', fontWeight: 600 }">
+              {{ record.personalFullAttendanceRate }}%
+            </span>
+          </template>
+        </template>
+      </a-table>
+    </div>
+
+    <div class="card">
       <div class="section-title">考勤明细</div>
       <a-table
         :data-source="rows"
@@ -126,10 +165,13 @@ import dayjs from 'dayjs';
 import { message } from 'ant-design-vue';
 import { UploadOutlined, SearchOutlined } from '@ant-design/icons-vue';
 import api from '../api';
+import { fmtHours } from '../lib/format';
+import DataDateBanner from '../components/DataDateBanner.vue';
 
 const range = ref([dayjs().subtract(30, 'day'), dayjs()]);
 const filterStatus = ref();
 const rows = ref([]);
+const summaryRows = ref([]);
 const lastImport = ref(null);
 
 const cols = [
@@ -137,10 +179,25 @@ const cols = [
   { title: '员工', dataIndex: 'employeeName', width: 140 },
   { title: '上班', dataIndex: 'clockIn', width: 100 },
   { title: '下班', dataIndex: 'clockOut', width: 100 },
-  { title: '工时（小时）', dataIndex: 'workHours', width: 130 },
+  {
+    title: '工时（小时）',
+    dataIndex: 'workHours',
+    width: 130,
+    customRender: ({ text }) => fmtHours(text),
+  },
   { title: '状态', dataIndex: 'status', width: 120 },
   { title: '备注', dataIndex: 'overrideNote' },
   { title: '操作', dataIndex: 'actions', width: 120, fixed: 'right' },
+];
+
+const summaryCols = [
+  { title: '员工', dataIndex: 'name', width: 120 },
+  { title: '总工时', dataIndex: 'totalHours', width: 110, sorter: (a, b) => a.totalHours - b.totalHours, defaultSortOrder: 'descend' },
+  { title: '出勤天数', dataIndex: 'days', width: 100 },
+  { title: '迟到', key: 'lateDays', dataIndex: 'lateDays', width: 80 },
+  { title: '早退', key: 'earlyDays', dataIndex: 'earlyDays', width: 80 },
+  { title: '漏刷', key: 'missedPunchDays', dataIndex: 'missedPunchDays', width: 80 },
+  { title: '全勤率', key: 'rate', width: 100 },
 ];
 
 const verificationCols = [
@@ -169,12 +226,14 @@ function statusColor(r) { return STATUS_MAP[r.status]?.[1] || 'default'; }
 const modal = reactive({ open: false, record: null, overrideType: '', overrideNote: '' });
 
 async function load() {
-  const params = {
+  const baseParams = {
     startDate: range.value?.[0]?.format('YYYY-MM-DD'),
     endDate: range.value?.[1]?.format('YYYY-MM-DD'),
-    status: filterStatus.value,
   };
-  rows.value = await api.get('/attendance', { params });
+  // Summary ignores status filter (always reflects full date range)
+  summaryRows.value = await api.get('/analytics/by-employee', { params: baseParams });
+  // Detail table applies status filter
+  rows.value = await api.get('/attendance', { params: { ...baseParams, status: filterStatus.value } });
 }
 
 async function handleUpload({ file, onSuccess, onError }) {

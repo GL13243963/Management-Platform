@@ -51,18 +51,19 @@ const Employee = {
 };
 
 /** Projects */
-const PROJ_COLS = ['code', 'name', 'description', 'manager', 'startDate', 'endDate', 'status'];
+const PROJ_COLS = ['code', 'name', 'description', 'manager', 'startDate', 'endDate', 'completionPercent', 'status'];
 const Project = {
   all() { return db.prepare('SELECT * FROM projects ORDER BY id DESC').all(); },
   find(id) { return db.prepare('SELECT * FROM projects WHERE id=?').get(id); },
   create(data) {
     const info = db.prepare(
-      `INSERT INTO projects (code, name, description, manager, startDate, endDate, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (code, name, description, manager, startDate, endDate, completionPercent, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       data.code ?? null, data.name,
       data.description ?? null, data.manager ?? null,
       data.startDate ?? null, data.endDate ?? null,
+      data.completionPercent ?? 0,
       data.status ?? 'active',
     );
     return this.find(Number(info.lastInsertRowid));
@@ -98,7 +99,8 @@ const ProjectMembership = {
   },
   activeForProject(projectId, date) {
     return db.prepare(`
-      SELECT pm.*, e.name AS empName, e.department AS empDepartment, e.position AS empPosition
+      SELECT pm.*, e.name AS empName, e.department AS empDepartment,
+             e.position AS empPosition, e.team AS empTeam
       FROM project_memberships pm
       LEFT JOIN employees e ON e.id = pm.employeeId
       WHERE pm.projectId=?
@@ -109,12 +111,29 @@ const ProjectMembership = {
   },
   historyForProject(projectId) {
     return db.prepare(`
-      SELECT pm.*, e.name AS empName, e.department AS empDepartment, e.position AS empPosition
+      SELECT pm.*, e.name AS empName, e.department AS empDepartment,
+             e.position AS empPosition, e.team AS empTeam
       FROM project_memberships pm
       LEFT JOIN employees e ON e.id = pm.employeeId
       WHERE pm.projectId=?
       ORDER BY pm.effectiveFrom DESC, pm.id DESC
     `).all(projectId);
+  },
+  /** Memberships overlapping the requested overview period. */
+  allWithNames({ startDate, endDate } = {}) {
+    const where = [];
+    const params = [];
+    if (endDate) { where.push('pm.effectiveFrom <= ?'); params.push(endDate); }
+    if (startDate) { where.push('(pm.effectiveTo IS NULL OR pm.effectiveTo >= ?)'); params.push(startDate); }
+    return db.prepare(`
+      SELECT pm.employeeId, pm.projectId, pm.weight,
+             e.name AS empName, e.team AS empTeam,
+             p.name AS projectName
+      FROM project_memberships pm
+      LEFT JOIN employees e ON e.id = pm.employeeId
+      LEFT JOIN projects  p ON p.id = pm.projectId
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    `).all(...params);
   },
   activeForEmployee(employeeId, date) {
     return db.prepare(`
@@ -127,29 +146,30 @@ const ProjectMembership = {
 };
 
 /** Attendance */
-const ATT_COLS = ['clockIn', 'clockOut', 'workHours', 'status', 'isLate', 'isEarlyLeave', 'isMissedPunch', 'rawClockIn', 'rawClockOut', 'sourceRow', 'sourceColumn', 'overrideType', 'overrideNote'];
+const ATT_COLS = ['clockIn', 'clockOut', 'workHours', 'status', 'isLate', 'isEarlyLeave', 'isMissedPunch', 'rawClockIn', 'rawClockOut', 'sourceRow', 'sourceColumn', 'overrideType', 'overrideNote', 'sourceOvertime', 'sourceBusinessTrip', 'sourceOutside', 'sourceOvertimeHours', 'sourceBusinessTripHours', 'sourceOutsideHours'];
 const AttendanceLog = {
   find(id) { return boolify(db.prepare('SELECT * FROM attendance_logs WHERE id=?').get(id), ['isLate', 'isEarlyLeave', 'isMissedPunch']); },
   findByEmpDate(employeeId, date) {
     return boolify(db.prepare('SELECT * FROM attendance_logs WHERE employeeId=? AND date=?').get(employeeId, date), ['isLate', 'isEarlyLeave']);
   },
-  upsert({ employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave, isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn }) {
+  upsert({ employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave, isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn, sourceOvertime, sourceBusinessTrip, sourceOutside, sourceOvertimeHours, sourceBusinessTripHours, sourceOutsideHours }) {
     const existing = this.findByEmpDate(employeeId, date);
     if (existing) {
+      const finalWorkHours = existing.overrideType ? existing.workHours : workHours;
       db.prepare(`
         UPDATE attendance_logs SET clockIn=?, clockOut=?, workHours=?, status=?, isLate=?, isEarlyLeave=?, isMissedPunch=?,
-          rawClockIn=?, rawClockOut=?, sourceRow=?, sourceColumn=?,
+          rawClockIn=?, rawClockOut=?, sourceRow=?, sourceColumn=?, sourceOvertime=?, sourceBusinessTrip=?, sourceOutside=?, sourceOvertimeHours=?, sourceBusinessTripHours=?, sourceOutsideHours=?,
           updatedAt=datetime('now','localtime') WHERE id=?
-      `).run(clockIn, clockOut, workHours, existing.overrideType || status, isLate?1:0, isEarlyLeave?1:0, isMissedPunch?1:0,
-        rawClockIn, rawClockOut, sourceRow, sourceColumn, existing.id);
+      `).run(clockIn, clockOut, finalWorkHours, existing.overrideType || status, isLate?1:0, isEarlyLeave?1:0, isMissedPunch?1:0,
+        rawClockIn ?? null, rawClockOut ?? null, sourceRow ?? null, sourceColumn ?? null, sourceOvertime?1:0, sourceBusinessTrip?1:0, sourceOutside?1:0, sourceOvertimeHours||0, sourceBusinessTripHours||0, sourceOutsideHours||0, existing.id);
       return { row: this.find(existing.id), created: false };
     }
     const info = db.prepare(`
       INSERT INTO attendance_logs (employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate, isEarlyLeave,
-        isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        isMissedPunch, rawClockIn, rawClockOut, sourceRow, sourceColumn, sourceOvertime, sourceBusinessTrip, sourceOutside, sourceOvertimeHours, sourceBusinessTripHours, sourceOutsideHours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(employeeId, employeeName, date, clockIn, clockOut, workHours, status, isLate?1:0, isEarlyLeave?1:0,
-      isMissedPunch?1:0, rawClockIn, rawClockOut, sourceRow, sourceColumn);
+      isMissedPunch?1:0, rawClockIn ?? null, rawClockOut ?? null, sourceRow ?? null, sourceColumn ?? null, sourceOvertime?1:0, sourceBusinessTrip?1:0, sourceOutside?1:0, sourceOvertimeHours||0, sourceBusinessTripHours||0, sourceOutsideHours||0);
     return { row: this.find(Number(info.lastInsertRowid)), created: true };
   },
   update(id, patch) {
@@ -174,7 +194,10 @@ const AttendanceLog = {
     return removed;
   },
   query({ startDate, endDate, employeeId, status } = {}) {
-    const where = [];
+    const where = [`NOT EXISTS (
+      SELECT 1 FROM comp_leave_records c
+      WHERE c.employeeId=attendance_logs.employeeId AND c.date=attendance_logs.date
+    )`];
     const params = [];
     if (startDate) { where.push('date >= ?'); params.push(startDate); }
     if (endDate) { where.push('date <= ?'); params.push(endDate); }
@@ -187,7 +210,10 @@ const AttendanceLog = {
   },
   /** 查询所有记录（无LIMIT，用于统计） */
   queryAll({ startDate, endDate, employeeId, status } = {}) {
-    const where = [];
+    const where = [`NOT EXISTS (
+      SELECT 1 FROM comp_leave_records c
+      WHERE c.employeeId=attendance_logs.employeeId AND c.date=attendance_logs.date
+    )`];
     const params = [];
     if (startDate) { where.push('date >= ?'); params.push(startDate); }
     if (endDate) { where.push('date <= ?'); params.push(endDate); }

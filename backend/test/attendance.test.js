@@ -6,16 +6,19 @@ const { computeDaily } = require('../src/services/attendance');
 const { parseMonthlyReport } = require('../src/services/monthly-report');
 
 test('single punch and explicit source marker are preserved as anomalies', () => {
-  assert.deepEqual(
-    computeDaily({ clockIn: '09:12', clockOut: '' }),
-    {
-      clockIn: '09:12', clockOut: null, workHours: 0,
-      isLate: false, isEarlyLeave: false, isMissedPunch: true, status: 'missed_punch',
-    },
-  );
+  const single = computeDaily({ clockIn: '09:12', clockOut: '' });
+  assert.equal(single.status, 'missed_punch');
+  assert.equal(single.clockIn, '09:12');
+  assert.equal(single.isMissedPunch, true);
+  assert.equal(single.workHours, 4);
+  assert.equal(computeDaily({ clockIn: '漏刷', clockOut: '17:45' }).workHours, 4);
+  assert.equal(computeDaily({ clockIn: '漏刷', clockOut: '' }).workHours, 0);
   const early = computeDaily({ clockIn: '09:10', clockOut: '17:43 早退' });
   assert.equal(early.isEarlyLeave, true);
   assert.equal(early.status, 'early');
+  const imported = computeDaily({ clockIn: '09:00', clockOut: '19:00', sourceText: '加班 2小时 外出 1小时' });
+  assert.equal(imported.sourceOvertimeHours, 2);
+  assert.equal(imported.sourceOutsideHours, 1);
 });
 
 test('both monthly report layouts map the complete date range', () => {

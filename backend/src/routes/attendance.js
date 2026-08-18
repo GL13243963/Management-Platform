@@ -19,6 +19,10 @@ const KEY_MAP = {
   date: ['date', '日期', '打卡日期'],
   clockIn: ['clockIn', 'in', '上班', '上班打卡', '签到', '上班时间'],
   clockOut: ['clockOut', 'out', '下班', '下班打卡', '签退', '下班时间'],
+  sourceText: ['status', '状态', '考勤状态', '备注', '异常'],
+  overtimeHours: ['overtimeHours', '加班时长', '加班小时'],
+  businessTripHours: ['businessTripHours', '出差时长', '出差小时'],
+  outsideHours: ['outsideHours', '外出时长', '外出小时'],
 };
 function pickKey(row, group) {
   for (const k of KEY_MAP[group]) {
@@ -92,7 +96,7 @@ async function importMonthlyReport(filePath) {
 
     for (const r of records) {
       const emp = empByName.get(r.name);
-      const daily = computeDaily({ clockIn: r.clockIn, clockOut: r.clockOut });
+      const daily = computeDaily({ clockIn: r.clockIn, clockOut: r.clockOut, sourceText: `${r.rawClockIn || ''} ${r.rawClockOut || ''}` });
       const { row, created: isNew } = AttendanceLog.upsert({
         employeeId: emp.id, employeeName: emp.name, date: r.date,
         clockIn: daily.clockIn, clockOut: daily.clockOut,
@@ -100,6 +104,8 @@ async function importMonthlyReport(filePath) {
         isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave, isMissedPunch: daily.isMissedPunch,
         rawClockIn: r.rawClockIn, rawClockOut: r.rawClockOut,
         sourceRow: r.sourceRow, sourceColumn: r.sourceColumn,
+        sourceOvertime: daily.sourceOvertime, sourceBusinessTrip: daily.sourceBusinessTrip, sourceOutside: daily.sourceOutside,
+        sourceOvertimeHours: daily.sourceOvertimeHours, sourceBusinessTripHours: daily.sourceBusinessTripHours, sourceOutsideHours: daily.sourceOutsideHours,
       });
       const check = verification.get(r.name) || {
         employeeName: r.name,
@@ -143,13 +149,15 @@ function importRowFormat(filePath) {
     if (!name || !date) { skipped++; continue; }
     let emp = Employee.findByName(name);
     if (!emp) emp = Employee.create({ name });
-    const daily = computeDaily({ clockIn, clockOut });
+    const daily = computeDaily({ clockIn, clockOut, sourceText: pickKey(raw, 'sourceText'), overtimeHours: pickKey(raw, 'overtimeHours'), businessTripHours: pickKey(raw, 'businessTripHours'), outsideHours: pickKey(raw, 'outsideHours') });
     const { created: isNew } = AttendanceLog.upsert({
       employeeId: emp.id, employeeName: emp.name, date,
       clockIn: daily.clockIn, clockOut: daily.clockOut,
       workHours: daily.workHours, status: daily.status,
       isLate: daily.isLate, isEarlyLeave: daily.isEarlyLeave, isMissedPunch: daily.isMissedPunch,
       rawClockIn: clockIn, rawClockOut: clockOut,
+      sourceOvertime: daily.sourceOvertime, sourceBusinessTrip: daily.sourceBusinessTrip, sourceOutside: daily.sourceOutside,
+      sourceOvertimeHours: daily.sourceOvertimeHours, sourceBusinessTripHours: daily.sourceBusinessTripHours, sourceOutsideHours: daily.sourceOutsideHours,
     });
     if (isNew) created++; else updated++;
   }
@@ -182,6 +190,43 @@ router.post('/import', upload.single('file'), async (req, res) => {
 });
 
 router.get('/', (req, res) => res.json(AttendanceLog.query(req.query)));
+
+// Return the earliest/latest attendance dates and record count — used by the
+// frontend to display a data-cutoff warning banner.
+router.get('/date-range', (req, res) => {
+  const att = db.prepare(`
+    SELECT MIN(date) AS earliestDate, MAX(date) AS latestDate,
+           COUNT(*) AS totalRecords, MAX(createdAt) AS lastImport
+    FROM attendance_logs
+    WHERE source='import'
+  `).get() || {};
+  const mem = db.prepare(`
+    SELECT MIN(effectiveFrom) AS earliestMembershipDate,
+           MAX(COALESCE(effectiveTo, date('now','localtime'))) AS latestMembershipDate,
+           COUNT(*) AS membershipRecords, MAX(createdAt) AS lastMembershipImport
+    FROM project_memberships
+  `).get() || {};
+  // Warn if attendance and allocation date ranges don't overlap —
+  // either allocations start before attendance data, or after it ends.
+  const noOverlap = !!(
+    att.latestDate && mem.earliestMembershipDate && mem.earliestMembershipDate > att.latestDate
+  );
+  const allocBeforeAtt = !!(
+    att.earliestDate && mem.earliestMembershipDate && mem.earliestMembershipDate < att.earliestDate
+  );
+  const hasWarning = noOverlap || allocBeforeAtt;
+  res.json({
+    earliestDate: att.earliestDate || null,
+    latestDate: att.latestDate || null,
+    totalRecords: att.totalRecords || 0,
+    lastImport: att.lastImport || null,
+    earliestMembershipDate: mem.earliestMembershipDate || null,
+    latestMembershipDate: mem.latestMembershipDate || null,
+    membershipRecords: mem.membershipRecords || 0,
+    lastMembershipImport: mem.lastMembershipImport || null,
+    hasWarning,
+  });
+});
 
 router.patch('/:id', (req, res) => {
   const log = AttendanceLog.find(req.params.id);

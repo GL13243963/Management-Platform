@@ -1,13 +1,15 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 
 const routes = [
-  { path: '/', redirect: '/dashboard' },
-  { path: '/dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '数据概览' } },
-  { path: '/attendance', name: 'Attendance', component: () => import('../views/Attendance.vue'), meta: { title: '考勤管理' } },
-  { path: '/projects', name: 'Projects', component: () => import('../views/Projects.vue'), meta: { title: '项目管理' } },
-  { path: '/allocation', name: 'Allocation', component: () => import('../views/Allocation.vue'), meta: { title: '项目分配' } },
-  { path: '/employees', name: 'Employees', component: () => import('../views/Employees.vue'), meta: { title: '人员管理' } },
-  { path: '/analytics', name: 'Analytics', component: () => import('../views/Analytics.vue'), meta: { title: '统计分析' } },
+  { path: '/', redirect: '/data' },
+  { path: '/data', name: 'DataOps', component: () => import('../views/DataOps.vue'), meta: { title: '数据及审批' } },
+  { path: '/attendance-board', name: 'AttendanceBoard', component: () => import('../views/Dashboard.vue'), meta: { title: '考勤看板' } },
+  { path: '/project-board', name: 'ProjectBoard', component: () => import('../views/Projects.vue'), meta: { title: '项目看板' } },
+  { path: '/attendance', redirect: '/data?tab=approval' },
+  { path: '/dashboard', redirect: '/attendance-board' },
+  { path: '/projects', redirect: '/project-board' },
+  { path: '/employees', redirect: '/data?tab=people' },
+  { path: '/analytics', redirect: '/attendance-board' },
 ];
 
 export default createRouter({ history: createWebHashHistory(), routes });

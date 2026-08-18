@@ -1,5 +1,7 @@
 const { ProjectMembership, AttendanceLog } = require('../models');
 
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
 /** For a given (employeeId, date), returns [{projectId, weight, role}] with normalized weights (sum=1). */
 function getActiveMemberships(employeeId, date) {
   const rows = ProjectMembership.activeForEmployee(employeeId, date);
@@ -27,12 +29,12 @@ function aggregateProjectHours({ startDate, endDate, employeeId, projectId } = {
     for (const p of distributeHours(log)) {
       if (projectId && p.projectId !== Number(projectId)) continue;
       const cur = projMap.get(p.projectId) || { projectId: p.projectId, hours: 0, days: 0 };
-      cur.hours = Math.round((cur.hours + p.hours) * 100) / 100;
+      cur.hours += p.hours;
       cur.days += 1;
       projMap.set(p.projectId, cur);
     }
   }
-  return Array.from(projMap.values());
+  return Array.from(projMap.values()).map(r => ({ ...r, hours: round2(r.hours) }));
 }
 
 module.exports = { getActiveMemberships, distributeHours, aggregateProjectHours };
