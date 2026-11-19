@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../public/boot.js',import.meta.url),'utf8');
+function context(){const nodes={'boot-state':{hidden:false,querySelector:s=>s==='p'?nodes.p:nodes.recovery},app:{hidden:false},p:{textContent:''},recovery:{hidden:true}},events={};let timeout,cleared=false;const window={addEventListener:(name,cb)=>events[name]=cb},ctx={window,document:{getElementById:id=>nodes[id]},setTimeout:cb=>{timeout=cb;return 1;},clearTimeout:()=>cleared=true};vm.runInNewContext(source,ctx);return {nodes,events,window,timeout,cleared:()=>cleared};}
+test('boot timeout exposes recovery and hides incomplete app',()=>{const c=context();c.timeout();assert.equal(c.nodes.recovery.hidden,false);assert.equal(c.nodes.app.hidden,true);assert.match(c.nodes.p.textContent,/加载失败/);});
+test('successful boot cancels watchdog and removes loading state',()=>{const c=context();c.window.__toolMatrixBoot.done();assert.equal(c.nodes['boot-state'].hidden,true);assert.ok(c.cleared());});
+test('module script errors show recovery, normal API rejections do not',()=>{const c=context();c.events.unhandledrejection({});assert.equal(c.nodes.recovery.hidden,true);c.events.error({target:{tagName:'SCRIPT'}});assert.equal(c.nodes.recovery.hidden,false);});

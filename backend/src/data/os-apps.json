@@ -1,0 +1,102 @@
+[
+  {
+    "appId": "operations",
+    "name": "运营平台",
+    "english": "OPERATIONS",
+    "description": "考勤、项目、填报与管理",
+    "order": 1,
+    "status": "enabled",
+    "visible": true,
+    "allowedRoles": [
+      "admin",
+      "leader",
+      "team_leader",
+      "employee",
+      "guest"
+    ],
+    "launch": {
+      "type": "operations-default",
+      "path": null
+    }
+  },
+  {
+    "appId": "expense-assistant",
+    "name": "项目填单助手",
+    "english": "EXPENSE ASSISTANT",
+    "description": "报销与发票辅助 · 仅预留入口",
+    "order": 2,
+    "status": "placeholder",
+    "visible": true,
+    "allowedRoles": [
+      "admin",
+      "leader",
+      "team_leader",
+      "employee",
+      "guest"
+    ],
+    "launch": {
+      "type": "route",
+      "path": "/coming-soon/expense"
+    }
+  },
+  {
+    "appId": "tool-matrix",
+    "name": "工具矩阵",
+    "english": "TOOL MATRIX",
+    "description": "插件、Skill 与效率工具共享",
+    "order": 3,
+    "status": "enabled",
+    "visible": true,
+    "allowedRoles": [
+      "admin",
+      "leader",
+      "team_leader",
+      "employee",
+      "guest"
+    ],
+    "launch": {
+      "type": "route",
+      "path": "/tool-matrix"
+    }
+  },
+  {
+    "appId": "render-gallery",
+    "name": "渲染图榜",
+    "english": "RENDER GALLERY",
+    "description": "好图分享、Prompt 与团队热榜",
+    "order": 4,
+    "status": "enabled",
+    "visible": true,
+    "allowedRoles": [
+      "admin",
+      "leader",
+      "team_leader",
+      "employee",
+      "guest"
+    ],
+    "launch": {
+      "type": "route",
+      "path": "/render-gallery"
+    }
+  },
+  {
+    "appId": "project-search",
+    "name": "项目库检索助手",
+    "english": "PROJECT SEARCH",
+    "description": "AI知识检索 · 仅预留入口",
+    "order": 5,
+    "status": "placeholder",
+    "visible": true,
+    "allowedRoles": [
+      "admin",
+      "leader",
+      "team_leader",
+      "employee",
+      "guest"
+    ],
+    "launch": {
+      "type": "route",
+      "path": "/coming-soon/project-search"
+    }
+  }
+]

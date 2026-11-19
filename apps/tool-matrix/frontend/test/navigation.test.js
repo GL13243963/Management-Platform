@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {platformPath,identityFailure} from '../src/platform/navigation.js';
+test('fixed navigation ignores untrusted targets',()=>{assert.equal(platformPath('https://example.com'),'/'+'#/os');assert.equal(platformPath('login'),'/'+'#/login');assert.equal(platformPath('password'),'/'+'#/change-password');});
+test('only identity errors request platform navigation',()=>{assert.equal(identityFailure({httpStatus:401}),'login');assert.equal(identityFailure({httpStatus:403,code:'PASSWORD_CHANGE_REQUIRED'}),'password');assert.equal(identityFailure({httpStatus:403,code:'FORBIDDEN'}),null);assert.equal(identityFailure({httpStatus:503}),null);});

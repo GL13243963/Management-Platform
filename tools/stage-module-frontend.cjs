@@ -1,0 +1,3 @@
+const path=require('node:path'),runtime=require('../backend/src/services/tool-matrix-runtime');
+const args={};for(let i=2;i<process.argv.length;i+=2){if(!process.argv[i+1]||Object.hasOwn(args,process.argv[i]))throw Error('Invalid args');args[process.argv[i]]=process.argv[i+1];}
+try{if(Object.keys(args).length!==4||!args['--dist']||!args['--asset-root']||!args['--version']||!args['--app-id'])throw Error('Required --app-id --dist --asset-root --version');if(!path.isAbsolute(args['--dist'])||!path.isAbsolute(args['--asset-root']))throw Error('Absolute paths required');console.log(runtime.stage(args['--dist'],args['--asset-root'],args['--version'],args['--app-id']));}catch(e){console.error(e.message);process.exitCode=1;}

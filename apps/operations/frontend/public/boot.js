@@ -1,0 +1,10 @@
+// Deliberately unbundled: this guard runs before the application module.
+(function(){
+ var state=document.getElementById('boot-state'),timer;
+ function done(){clearTimeout(timer);var app=document.getElementById('app');if(app)app.hidden=false;if(state)state.hidden=true;}
+ function fail(){clearTimeout(timer);var app=document.getElementById('app');if(app)app.hidden=true;if(state){state.hidden=false;state.querySelector('p').textContent='运营平台加载失败，请重试或打开旧版。';state.querySelector('[data-recovery]').hidden=false;}}
+ window.__operationsBoot={done:done,fail:fail};
+ window.addEventListener('error',function(e){if(e.target&&e.target.tagName==='SCRIPT'||e.error)fail();},true);
+ window.addEventListener('unhandledrejection',function(){/* API failures are handled by application UI. */});
+ timer=setTimeout(function(){if(state){state.hidden=false;state.querySelector('p').textContent='加载较慢，请稍候，也可以重新加载。';state.querySelector('[data-recovery]').hidden=false;}},15000);
+})();

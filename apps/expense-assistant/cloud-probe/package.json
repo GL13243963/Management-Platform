@@ -1,0 +1,11 @@
+{
+  "name": "expense-assistant-cloud-probe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-login": "node check-login.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

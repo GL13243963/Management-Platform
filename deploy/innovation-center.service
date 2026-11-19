@@ -1,0 +1,18 @@
+[Unit]
+Description=Innovation Center Management Platform
+After=network.target
+
+[Service]
+Type=simple
+User=innovation-center
+Group=innovation-center
+WorkingDirectory=/opt/innovation-center/current/backend
+EnvironmentFile=/etc/innovation-center.env
+ExecStart=/usr/bin/node --experimental-sqlite src/index.js
+Restart=always
+RestartSec=5
+UMask=0027
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

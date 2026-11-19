@@ -1,0 +1,11 @@
+[Unit]
+Description=Innovation Center controlled system update
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/innovation-center-update
+Environment=HOME=/var/lib/innovation-center
+Environment=npm_config_cache=/var/cache/innovation-center-npm
+PrivateTmp=true
+ProtectHome=true

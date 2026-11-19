@@ -1,0 +1,2 @@
+export function isOperationsEntry(to){return ['/data','/attendance-board','/project-board','/weekly-report','/team-review','/attendance','/dashboard','/projects','/employees','/analytics'].includes(to.path)&&!(to.path==='/data'&&['accounts','system'].includes(to.query?.tab));}
+export function operationsEntry(value,to){if(value.mode==='legacy')return null;if(value.mode!=='independent'||!/^v\d+\.\d+\.\d+$/.test(value.version)||value.entry!=='/apps/operations/versions/'+value.version+'/index.html')throw Error('Invalid operations entry');return value.entry+'#'+to.fullPath;}

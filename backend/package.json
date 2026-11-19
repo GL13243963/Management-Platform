@@ -1,0 +1,44 @@
+{
+  "name": "innovation-center-backend",
+  "version": "1.0.0",
+  "description": "Local Personnel & Project Management Platform - Backend",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite src/index.js",
+    "dev": "nodemon --exec \"node --experimental-sqlite\" src/index.js",
+    "auth:bootstrap": "node --experimental-sqlite scripts/bootstrap-auth.js",
+    "auth:reset-all": "node --experimental-sqlite scripts/bootstrap-auth.js --reset-all",
+    "seed": "node --experimental-sqlite src/utils/seed.js",
+    "test": "node --test",
+    "prestart": "node scripts/check-runtime.js",
+    "predev": "node scripts/check-runtime.js",
+    "pretest": "node scripts/check-runtime.js",
+    "preseed": "node scripts/check-runtime.js",
+    "preauth:bootstrap": "node scripts/check-runtime.js",
+    "preauth:reset-all": "node scripts/check-runtime.js",
+    "runtime:check": "node scripts/check-runtime.js",
+    "prestart:local": "node scripts/check-runtime.js",
+    "start:local": "node scripts/start-local.js",
+    "predev:local": "node scripts/check-runtime.js",
+    "dev:local": "nodemon --exec \"node scripts/start-local.js\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.10",
+    "express": "4.22.3",
+    "multer": "2.5.0",
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "overrides": {
+    "body-parser": "1.20.9",
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.1"
+  }
+}
